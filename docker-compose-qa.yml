@@ -12,6 +12,10 @@ services:
       - QA_DB_USERNAME
       - QA_DB_PASSWORD
       - QA_AUTH_HOST
+      - FIGMA_TOKEN
+      - NOTION_TOKEN
+      - GITHUB_TOKEN
+      - LITELLM_API_KEY
     volumes:
       - qa_evidence:/data/evidence
     networks:

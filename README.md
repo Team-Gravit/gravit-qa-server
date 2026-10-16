@@ -14,7 +14,9 @@ Gravit QA 플랫폼(서비스명 gravit-qa) 백엔드. 백오피스(gravit-admin
 | 관리자 인증: `/admin/me` 판정 필터 + 성공 300초 캐시, 200/401/403/503 매핑 | 완료 |
 | 작업 큐: 등록·점유(`SKIP LOCKED`)·단계 기록·취소·재시도(2→4→8분)·heartbeat 회수 | 완료 |
 | `GET /api/v1/jobs/{id}`, `POST /api/v1/jobs/{id}/cancel` | 완료 |
-| 스프린트·체크리스트·실행·증적·페르소나 API | C3 이후 |
+| 외부 수집 어댑터: GitHub, Notion, Figma, dev OpenAPI, LLM(litellm-gw) + 공통 재시도 규칙 | 완료 (C3) |
+| 스냅샷 파일 저장소, AOS 버전 파서 | 완료 (C3) |
+| 스프린트·체크리스트·실행·증적·페르소나 API, 셋업 작업 처리기 | C4 이후 |
 
 ## 로컬 실행
 
@@ -30,7 +32,10 @@ export $(grep -v '^#' .env | xargs)
 ./gradlew test                       # Docker가 있으면 Testcontainers로 Postgres 기동
 QA_TEST_DB_URL=jdbc:postgresql://localhost:5432/gravit_qa_test \
 QA_TEST_DB_USERNAME=postgres QA_TEST_DB_PASSWORD=... ./gradlew test   # 기존 DB 사용
+./gradlew liveTest                   # 실제 Notion, Figma 호출 스모크(@Tag("live")). 변수가 없으면 건너뜀
 ```
+
+기본 `test`는 외부 서비스를 호출하지 않는다. `liveTest`에 필요한 변수는 `.claude/spec/secret-convention.md`를 본다.
 
 ## 배포
 
