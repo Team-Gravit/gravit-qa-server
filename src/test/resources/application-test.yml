@@ -7,3 +7,18 @@ qa:
     job-types:
       - REVIEW_COLLECT
       - SETUP
+  adapter:
+    github:
+      token: test-github-token
+      timeout: 300ms
+    notion:
+      token: test-notion-token
+      timeout: 300ms
+    figma:
+      token: test-figma-token
+      timeout: 300ms
+    openapi:
+      timeout: 300ms
+    llm:
+      api-key: test-llm-key
+      timeout: 300ms
