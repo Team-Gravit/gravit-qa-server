@@ -136,11 +136,8 @@ public class HttpStubServer {
 
     public record StubResponse(
             int status,
-
             Map<String, String> headers,
-
             byte[] body,
-
             Duration delay
     ) {
 
@@ -178,13 +175,9 @@ public class HttpStubServer {
 
     public record RecordedRequest(
             String method,
-
             String path,
-
             String query,
-
             Map<String, List<String>> headers,
-
             String body
     ) {
 

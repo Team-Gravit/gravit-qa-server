@@ -11,7 +11,9 @@ import java.time.Duration;
 @Validated
 @ConfigurationProperties("qa.adapter.figma")
 public record FigmaProps(
-        @NotBlank String baseUrl,
+        @NotBlank
+        String baseUrl,
+
         String token,
 
         @NotNull @DefaultValue("30s")

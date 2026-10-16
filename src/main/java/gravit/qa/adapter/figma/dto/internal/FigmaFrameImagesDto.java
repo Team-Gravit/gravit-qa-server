@@ -5,7 +5,6 @@ import java.util.Map;
 
 public record FigmaFrameImagesDto(
         Map<String, byte[]> nodeIdToPng,
-
         List<String> failedNodeIds
 ) {
 }

@@ -6,9 +6,7 @@ import java.util.List;
 
 public record FigmaScreenDto(
         String screenId,
-
         FigmaPlatform platform,
-
         List<FigmaFrameDto> frames
 ) {
 

@@ -317,7 +317,6 @@ class LlmClientIntegrationTest {
 
     public record DraftItemDto(
             String title,
-
             List<String> parts
     ) {
     }

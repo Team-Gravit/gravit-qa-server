@@ -4,7 +4,6 @@ import java.util.List;
 
 public record LlmValidationResultDto<T>(
         T value,
-
         List<String> errors
 ) {
 

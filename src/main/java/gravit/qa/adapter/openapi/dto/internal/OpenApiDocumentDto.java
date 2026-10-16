@@ -4,9 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 
 public record OpenApiDocumentDto(
         String url,
-
         JsonNode document,
-
         String rawJson
 ) {
 }

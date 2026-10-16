@@ -7,13 +7,9 @@ import java.util.Optional;
 
 public record FigmaQaFramesDto(
         String fileKey,
-
         String qaPageId,
-
         String sprintSectionId,
-
         List<FigmaScreenDto> screens,
-
         List<FigmaFrameWarningDto> warnings
 ) {
 
