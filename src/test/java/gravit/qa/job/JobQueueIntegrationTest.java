@@ -21,8 +21,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.time.Duration;
@@ -38,6 +38,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.SoftAssertions.assertSoftly;
 
 @QaSpringBootTest
+@Import(JobQueueIntegrationTest.StubHandlerConfig.class)
 class JobQueueIntegrationTest {
 
     @Autowired
@@ -408,7 +409,6 @@ class JobQueueIntegrationTest {
         }
     }
 
-    @TestConfiguration(proxyBeanMethods = false)
     static class StubHandlerConfig {
 
         @Bean
