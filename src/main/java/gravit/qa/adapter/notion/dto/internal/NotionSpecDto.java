@@ -7,23 +7,14 @@ import java.util.regex.Pattern;
 
 public record NotionSpecDto(
         String pageId,
-
         String screenId,
-
         String name,
-
         List<String> parts,
-
         String route,
-
         String relatedApi,
-
         String figmaUrl,
-
         String specStatus,
-
         LocalDate lastVerifiedAt,
-
         String rawJson
 ) {
 

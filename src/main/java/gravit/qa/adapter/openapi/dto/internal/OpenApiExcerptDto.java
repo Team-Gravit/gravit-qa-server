@@ -6,9 +6,7 @@ import java.util.List;
 
 public record OpenApiExcerptDto(
         JsonNode excerpt,
-
         List<String> foundOperationIds,
-
         List<String> missingOperationIds
 ) {
 }

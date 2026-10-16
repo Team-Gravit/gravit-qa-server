@@ -6,7 +6,6 @@ import java.util.List;
 
 public record NotionBlockDto(
         JsonNode block,
-
         List<NotionBlockDto> children
 ) {
 

@@ -11,11 +11,14 @@ import java.time.Duration;
 @Validated
 @ConfigurationProperties("qa.adapter.retry")
 public record AdapterRetryProps(
-        @Min(0) @DefaultValue("3") int maxRetries,
+        @Min(0) @DefaultValue("3")
+        int maxRetries,
 
-        @NotNull @DefaultValue("1s") Duration backoffBase,
+        @NotNull @DefaultValue("1s")
+        Duration backoffBase,
 
-        @NotNull @DefaultValue("60s") Duration maxWait
+        @NotNull @DefaultValue("60s")
+        Duration maxWait
 ) {
 
     public Duration backoff(int retry) {

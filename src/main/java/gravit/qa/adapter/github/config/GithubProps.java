@@ -11,7 +11,9 @@ import java.time.Duration;
 @Validated
 @ConfigurationProperties("qa.adapter.github")
 public record GithubProps(
-        @NotBlank String baseUrl,
+        @NotBlank
+        String baseUrl,
+
         String token,
 
         @NotBlank
