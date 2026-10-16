@@ -11,6 +11,8 @@
 | 페르소나 데이터셋(`auto`/`manual` 세트) | 9 |
 | 재시도 정책(작업 최초 1회 + 재시도 3회, 2→4→8분) | 10 |
 | 화면 안내(`guide`) | 15 |
+| Figma QA 페이지 해석(화면 ID, 상태, 경고) | 5-2, 가이드 3-3 → [`figma-qa-page.md`](figma-qa-page.md) |
+| 외부 연동 결정값(재시도, 타임아웃, LLM 호출 제한) | 8, 10 → [`external-adapters.md`](external-adapters.md) |
 
 ## 작업 큐
 
