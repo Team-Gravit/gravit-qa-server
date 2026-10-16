@@ -1,0 +1,9 @@
+qa:
+  auth:
+    timeout: 1s
+  worker:
+    enabled: false
+    id: test-worker
+    job-types:
+      - REVIEW_COLLECT
+      - SETUP

@@ -1,0 +1,4 @@
+qa:
+  worker:
+    job-types:
+      - AUTO_RUN

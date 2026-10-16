@@ -1,0 +1,6 @@
+qa:
+  worker:
+    job-types:
+      - SETUP
+      - REVIEW_COLLECT
+      - EVIDENCE_CLEANUP

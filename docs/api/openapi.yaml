@@ -1,0 +1,1290 @@
+openapi: 3.1.0
+info:
+  title: gravit-qa API
+  version: 0.1.0-draft
+  description: |
+    Gravit QA 플랫폼 API 초안 (B-2). 설계 근거는 `03_DESIGN.md`.
+
+    - 인증: 관리자 accessToken을 Bearer로 전달. 서버가 `GET {AUTH_HOST}/api/v1/admin/me`로 판정한다
+      (200 통과 / 401 / 403 / 판정 불가 503). 프론트는 401에서 재발급 후 1회 재시도한다.
+    - admin-web은 `/qa-api/:path*` → `https://{qaDomain}/api/v1/:path*` rewrite로 호출한다.
+    - 오류 본문은 gravit-server `ErrorResponse`와 같은 형태(`error`, `message`)를 따른다.
+    - 비동기 작업(준비·자동 실행·리뷰 수집)은 202 + Job을 반환하고, 프론트는 polling한다.
+    - 낙관적 잠금이 있는 리소스는 요청에 `version`을 보내며, 불일치 시 409를 반환한다.
+servers:
+  - url: https://{qaDomain}/api/v1
+    variables:
+      qaDomain:
+        default: qa-api.example.invalid
+        description: 확정 전 (02_PREP_GUIDE Part 2 #13)
+security:
+  - adminBearer: []
+tags:
+  - name: Sprint
+    description: 스프린트 등록·조회·종료
+  - name: Setup
+    description: QA 준비하기(셋업 작업)와 작업 상태
+  - name: Checklist
+    description: 체크 항목·분류 확정·체크 셀
+  - name: Run
+    description: 자동 실행
+  - name: Evidence
+    description: 자동 실행 증적 파일
+  - name: Review
+    description: 코드 검수 리포트(GitHub Checks 수집)
+  - name: Report
+    description: 스프린트 리포트
+  - name: Persona
+    description: 페르소나 데이터셋 매니페스트·수동 세트 재적재·토큰 발급
+
+paths:
+  /sprints:
+    get:
+      tags: [Sprint]
+      operationId: listSprints
+      summary: 스프린트 QA 목록
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/SprintStatus'
+      responses:
+        '200':
+          description: 최신 생성순
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SprintSummary'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '503': { $ref: '#/components/responses/AuthUnavailable' }
+    post:
+      tags: [Sprint]
+      operationId: createSprint
+      summary: Notion 스프린트 페이지로 스프린트 등록
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SprintCreateRequest'
+      responses:
+        '201':
+          description: DRAFT 상태로 생성
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Sprint'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: Notion 페이지를 찾을 수 없음(Integration 미연결 포함)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/AuthUnavailable' }
+
+  /sprints/{sprintId}:
+    parameters:
+      - $ref: '#/components/parameters/SprintId'
+    get:
+      tags: [Sprint]
+      operationId: getSprint
+      summary: 스프린트 상세(기준점 포함)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Sprint'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/AuthUnavailable' }
+
+  /sprints/{sprintId}/close:
+    parameters:
+      - $ref: '#/components/parameters/SprintId'
+    post:
+      tags: [Sprint]
+      operationId: closeSprint
+      summary: 스프린트 종료
+      description: |
+        IN_PROGRESS에서만 가능. UNCHECKED 셀이 0개이고 실행 중 자동 실행이 없어야 한다.
+        FAIL 셀은 허용(리포트의 미해결 FAIL로 남는다). Notion `QA 기준점` 기록은 best effort.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VersionedRequest'
+      responses:
+        '200':
+          description: CLOSED
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Sprint'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/AuthUnavailable' }
+
+  /sprints/{sprintId}/setup-jobs:
+    parameters:
+      - $ref: '#/components/parameters/SprintId'
+    post:
+      tags: [Setup]
+      operationId: startSetupJob
+      summary: QA 준비하기 실행
+      description: |
+        DRAFT / PREPARE_FAILED / REVIEW에서 가능. 스프린트를 PREPARING으로 바꾸고 SETUP 작업을 큐에 넣는다.
+        REVIEW에서 재실행하면 성공 시 PROPOSED 항목만 교체된다.
+      responses:
+        '202':
+          description: 작업 생성
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/AuthUnavailable' }
+
+  /jobs/{jobId}:
+    parameters:
+      - $ref: '#/components/parameters/JobId'
+    get:
+      tags: [Setup]
+      operationId: getJob
+      summary: 작업 상태·단계 조회 (polling 대상)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/AuthUnavailable' }
+
+  /jobs/{jobId}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/JobId'
+    post:
+      tags: [Setup]
+      operationId: cancelJob
+      summary: 작업 취소 요청
+      description: QUEUED는 즉시 CANCELLED, RUNNING은 다음 단계 경계에서 중단된다.
+      responses:
+        '202':
+          description: 취소 요청 접수
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/AuthUnavailable' }
+
+  /sprints/{sprintId}/checklist:
+    parameters:
+      - $ref: '#/components/parameters/SprintId'
+    get:
+      tags: [Checklist]
+      operationId: getChecklist
+      summary: 체크리스트 (기능별 항목 × 파트 셀)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Checklist'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/AuthUnavailable' }
+
+  /sprints/{sprintId}/checklist-items:
+    parameters:
+      - $ref: '#/components/parameters/SprintId'
+    post:
+      tags: [Checklist]
+      operationId: createChecklistItem
+      summary: 체크 항목 수동 추가 (REVIEW 전용)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChecklistItemCreateRequest'
+      responses:
+        '201':
+          description: origin = HUMAN, reviewState = CONFIRMED
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChecklistItem'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/AuthUnavailable' }
+
+  /checklist-items/{itemId}:
+    parameters:
+      - $ref: '#/components/parameters/ItemId'
+    patch:
+      tags: [Checklist]
+      operationId: updateChecklistItem
+      summary: 체크 항목 수정·확정·거절 (REVIEW 전용)
+      description: |
+        classification을 AUTO로 바꾸려면 testRef가 테스트 카탈로그에 존재해야 한다(없으면 422).
+        parts에서 빠진 파트의 셀은 NOT_APPLICABLE이 된다.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChecklistItemUpdateRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChecklistItem'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '503': { $ref: '#/components/responses/AuthUnavailable' }
+
+  /sprints/{sprintId}/checklist/confirm:
+    parameters:
+      - $ref: '#/components/parameters/SprintId'
+    post:
+      tags: [Checklist]
+      operationId: confirmChecklist
+      summary: 분류 확정 (REVIEW → IN_PROGRESS)
+      description: 모든 항목이 CONFIRMED 또는 REJECTED여야 한다. AUTO 항목이 있고 startAutoRun이 true면 자동 실행을 큐에 넣는다.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChecklistConfirmRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChecklistConfirmResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/AuthUnavailable' }
+
+  /checklist-items/{itemId}/cells/{part}:
+    parameters:
+      - $ref: '#/components/parameters/ItemId'
+      - $ref: '#/components/parameters/Part'
+    put:
+      tags: [Checklist]
+      operationId: updateCheckCell
+      summary: 수동 체크 (IN_PROGRESS 전용)
+      description: |
+        허용 상태: UNCHECKED / PASS / FAIL. AUTO 항목의 자동 판정 셀과 NOT_APPLICABLE 셀은 변경 불가(422).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckCellUpdateRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckCell'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '503': { $ref: '#/components/responses/AuthUnavailable' }
+
+  /checklist-items/{itemId}/cells/{part}/history:
+    parameters:
+      - $ref: '#/components/parameters/ItemId'
+      - $ref: '#/components/parameters/Part'
+    get:
+      tags: [Checklist]
+      operationId: listCheckCellHistory
+      summary: 셀 변경 이력
+      responses:
+        '200':
+          description: 최신순
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CheckCellHistory'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/AuthUnavailable' }
+
+  /sprints/{sprintId}/runs:
+    parameters:
+      - $ref: '#/components/parameters/SprintId'
+    get:
+      tags: [Run]
+      operationId: listRuns
+      summary: 자동 실행 목록
+      responses:
+        '200':
+          description: 최신순
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AutoRunSummary'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/AuthUnavailable' }
+    post:
+      tags: [Run]
+      operationId: startRun
+      summary: 자동 실행 시작 (IN_PROGRESS 전용)
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RunCreateRequest'
+      responses:
+        '202':
+          description: 실행 생성(QUEUED)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutoRunSummary'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/AuthUnavailable' }
+        '507':
+          description: 증적 저장 용량 부족으로 실행 거부
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /runs/{runId}:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+    get:
+      tags: [Run]
+      operationId: getRun
+      summary: 자동 실행 상세(케이스 결과·증적 참조)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutoRun'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/AuthUnavailable' }
+
+  /runs/{runId}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+    post:
+      tags: [Run]
+      operationId: cancelRun
+      summary: 자동 실행 취소 요청
+      responses:
+        '202':
+          description: 취소 요청 접수(진행 중 케이스 종료 후 중단)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutoRunSummary'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/AuthUnavailable' }
+
+  /evidence/{evidenceId}:
+    parameters:
+      - name: evidenceId
+        in: path
+        required: true
+        schema: { type: integer, format: int64 }
+    get:
+      tags: [Evidence]
+      operationId: getEvidence
+      summary: 증적 파일 다운로드
+      description: 인증이 필요하므로 프론트는 fetch 후 Blob URL로 표시한다.
+      responses:
+        '200':
+          description: 파일 본문
+          content:
+            image/png:
+              schema: { type: string, contentMediaType: image/png }
+            application/zip:
+              schema: { type: string, contentMediaType: application/zip }
+            text/plain:
+              schema: { type: string }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '410':
+          description: 보존 기간 만료로 삭제됨
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '503': { $ref: '#/components/responses/AuthUnavailable' }
+
+  /sprints/{sprintId}/review-report:
+    parameters:
+      - $ref: '#/components/parameters/SprintId'
+    get:
+      tags: [Review]
+      operationId: getReviewReport
+      summary: 코드 검수 리포트(기준점 SHA의 GitHub Checks)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewReport'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: 기준점이 아직 없음(준비 전)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '503': { $ref: '#/components/responses/AuthUnavailable' }
+
+  /sprints/{sprintId}/review-report/refresh:
+    parameters:
+      - $ref: '#/components/parameters/SprintId'
+    post:
+      tags: [Review]
+      operationId: refreshReviewReport
+      summary: 리뷰 결과 재수집
+      responses:
+        '202':
+          description: REVIEW_COLLECT 작업 생성
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/AuthUnavailable' }
+
+  /sprints/{sprintId}/report:
+    parameters:
+      - $ref: '#/components/parameters/SprintId'
+    get:
+      tags: [Report]
+      operationId: getSprintReport
+      summary: 스프린트 리포트(진행률·자동 결과·미해결 FAIL·자동화 후보·경고)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SprintReport'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/AuthUnavailable' }
+
+  /personas:
+    get:
+      tags: [Persona]
+      operationId: listPersonas
+      summary: 페르소나 매니페스트(세트별 마지막 적재 결과)
+      parameters:
+        - name: set
+          in: query
+          required: true
+          schema: { $ref: '#/components/schemas/PersonaSet' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PersonaManifest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: 해당 세트가 아직 적재된 적 없음
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '503': { $ref: '#/components/responses/AuthUnavailable' }
+
+  /personas/manual/reload:
+    post:
+      tags: [Persona]
+      operationId: reloadManualPersonas
+      summary: 수동 세트 재적재
+      description: |
+        `manual` 세트만 삭제 후 재적재한다(자동 세트와 독립). 진행 중인 수동 검수 데이터가 초기화되므로
+        프론트는 실행 전 확인을 받는다. 재적재 후 userId가 바뀌므로 기존 토큰은 무효가 된다.
+      responses:
+        '200':
+          description: 재적재 완료
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PersonaManifest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: 다른 재적재가 진행 중
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '502':
+          description: gravit-server 적재 API 실패
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '503': { $ref: '#/components/responses/AuthUnavailable' }
+
+  /personas/manual/{personaKey}/tokens:
+    parameters:
+      - name: personaKey
+        in: path
+        required: true
+        schema: { type: string, examples: [learner] }
+    post:
+      tags: [Persona]
+      operationId: issueManualPersonaToken
+      summary: 수동 세트 페르소나 토큰 발급
+      description: gravit-qa가 gravit-server `POST /api/v1/test/users/login`을 대리 호출한다. 응답 토큰은 저장하지 않는다.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PersonaToken' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: 매니페스트에 없는 페르소나(또는 보조 유저)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '502':
+          description: gravit-server 토큰 발급 실패
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '503': { $ref: '#/components/responses/AuthUnavailable' }
+
+components:
+  securitySchemes:
+    adminBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Gravit 관리자 accessToken. gravit-qa는 서명을 검증하지 않고 /admin/me로 판정한다.
+
+  parameters:
+    SprintId:
+      name: sprintId
+      in: path
+      required: true
+      schema: { type: integer, format: int64 }
+    JobId:
+      name: jobId
+      in: path
+      required: true
+      schema: { type: integer, format: int64 }
+    ItemId:
+      name: itemId
+      in: path
+      required: true
+      schema: { type: integer, format: int64 }
+    RunId:
+      name: runId
+      in: path
+      required: true
+      schema: { type: integer, format: int64 }
+    Part:
+      name: part
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/Part'
+
+  responses:
+    BadRequest:
+      description: 요청 형식 오류
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Unauthorized:
+      description: 토큰 없음·만료·무효. 프론트는 재발급 후 1회 재시도
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Forbidden:
+      description: 유효한 토큰이나 ADMIN 아님. 재시도 불필요
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    NotFound:
+      description: 리소스 없음
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Conflict:
+      description: 상태 전이 불가, 중복, 실행 중 작업 존재, 또는 version 불일치
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Unprocessable:
+      description: 규칙 위반(자동 판정 셀 수동 변경, 카탈로그에 없는 testRef 등)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    AuthUnavailable:
+      description: 인증 서버 판정 불가(타임아웃·연결 실패·예상 외 응답). 401로 취급하지 않는다
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [error, message]
+      properties:
+        error: { type: string, description: 오류 코드 }
+        message: { description: 사람이 읽는 메시지 또는 필드별 오류 객체 }
+
+    # ---------- 열거형 ----------
+    SprintStatus:
+      type: string
+      enum: [DRAFT, PREPARING, PREPARE_FAILED, REVIEW, IN_PROGRESS, CLOSED]
+    Part:
+      type: string
+      enum: [SERVER, WEB, APP]
+    CellState:
+      type: string
+      enum: [UNCHECKED, PASS, FAIL, NOT_APPLICABLE]
+    Classification:
+      type: string
+      enum: [AUTO, MANUAL]
+    ReviewState:
+      type: string
+      enum: [PROPOSED, CONFIRMED, REJECTED]
+    SpecStatus:
+      type: string
+      enum: [DRAFT, NEEDS_CHECK, CONFIRMED]
+    JobType:
+      type: string
+      enum: [SETUP, AUTO_RUN, REVIEW_COLLECT, EVIDENCE_CLEANUP]
+    JobStatus:
+      type: string
+      enum: [QUEUED, RUNNING, SUCCEEDED, FAILED, CANCELLED]
+    StepStatus:
+      type: string
+      enum: [PENDING, RUNNING, DONE, FAILED, SKIPPED]
+    RunStatus:
+      type: string
+      enum: [QUEUED, RUNNING, COMPLETED, FAILED, CANCELLED]
+    CaseOutcome:
+      type: string
+      enum: [PASS, FAIL, ERROR, SKIPPED]
+    EvidenceKind:
+      type: string
+      enum: [SCREENSHOT, TRACE, HTTP_LOG, CONSOLE_LOG]
+    Repo:
+      type: string
+      enum: [gravit-server, gravit-web, gravit-aos]
+
+    # ---------- 공통 요청 ----------
+    VersionedRequest:
+      type: object
+      required: [version]
+      properties:
+        version: { type: integer, description: 낙관적 잠금 값 }
+
+    # ---------- 스프린트 ----------
+    SprintCreateRequest:
+      type: object
+      required: [notionPageUrl]
+      properties:
+        notionPageUrl:
+          type: string
+          format: uri
+          description: Notion 스프린트 DB 행 페이지 URL
+
+    PartProgress:
+      type: object
+      required: [part, total, pass, fail, unchecked, notApplicable]
+      properties:
+        part: { $ref: '#/components/schemas/Part' }
+        total: { type: integer, description: NOT_APPLICABLE 제외 셀 수 }
+        pass: { type: integer }
+        fail: { type: integer }
+        unchecked: { type: integer }
+        notApplicable: { type: integer }
+
+    SprintGuide:
+      type: object
+      description: 화면 안내용. 서버는 코드만 내려 주고 문구는 admin-web이 관리한다(설계 15절)
+      required: [stage, stageIndex, stageCount, nextAction, blockers]
+      properties:
+        stage:
+          type: string
+          enum: [PREPARE, REVIEW, CHECK, CLOSE, DONE]
+        stageIndex: { type: integer, minimum: 1 }
+        stageCount: { type: integer, examples: [5] }
+        nextAction:
+          type: string
+          enum: [START_SETUP, WAIT_SETUP, RETRY_SETUP, REVIEW_ITEMS, CONFIRM_CHECKLIST, CHECK_CELLS, WAIT_AUTO_RUN, CLOSE_SPRINT, NONE]
+        blockers:
+          type: array
+          items: { $ref: '#/components/schemas/GuideBlocker' }
+
+    GuideBlocker:
+      type: object
+      required: [code]
+      properties:
+        code:
+          type: string
+          enum: [PROPOSED_ITEMS_REMAINING, UNCHECKED_CELLS_REMAINING, AUTO_RUN_IN_PROGRESS, SETUP_IN_PROGRESS, RELEASE_BRANCH_MISSING]
+        count: { type: [integer, 'null'], description: 남은 수(해당 시) }
+        part:
+          oneOf:
+            - $ref: '#/components/schemas/Part'
+            - type: 'null'
+
+    SprintSummary:
+      type: object
+      required: [id, sprintKey, status, progress, guide]
+      properties:
+        guide: { $ref: '#/components/schemas/SprintGuide' }
+        id: { type: integer, format: int64 }
+        sprintKey: { type: string, examples: ['2026-S21'] }
+        periodStart: { type: [string, 'null'], format: date }
+        periodEnd: { type: [string, 'null'], format: date }
+        status: { $ref: '#/components/schemas/SprintStatus' }
+        progress:
+          type: array
+          items: { $ref: '#/components/schemas/PartProgress' }
+
+    Sprint:
+      allOf:
+        - $ref: '#/components/schemas/SprintSummary'
+        - type: object
+          required: [notionPageId, version, createdAt, createdBy]
+          properties:
+            notionPageId: { type: string }
+            figmaFileKey: { type: [string, 'null'] }
+            baseline:
+              oneOf:
+                - $ref: '#/components/schemas/Baseline'
+                - type: 'null'
+            latestSetupJobId: { type: [integer, 'null'], format: int64 }
+            preparedAt: { type: [string, 'null'], format: date-time }
+            confirmedAt: { type: [string, 'null'], format: date-time }
+            closedAt: { type: [string, 'null'], format: date-time }
+            createdAt: { type: string, format: date-time }
+            createdBy: { type: integer, format: int64, description: /admin/me의 adminId }
+            version: { type: integer }
+
+    Baseline:
+      type: object
+      required: [id, createdAt, repos]
+      properties:
+        id: { type: integer, format: int64 }
+        previousBaselineId: { type: [integer, 'null'], format: int64 }
+        createdAt: { type: string, format: date-time }
+        repos:
+          type: array
+          items: { $ref: '#/components/schemas/BaselineRepo' }
+
+    BaselineRepo:
+      type: object
+      required: [repo, branch, commitSha]
+      properties:
+        repo: { $ref: '#/components/schemas/Repo' }
+        branch: { type: string, examples: [release] }
+        commitSha: { type: string, pattern: '^[0-9a-f]{40}$' }
+        previousCommitSha:
+          type: [string, 'null']
+          pattern: '^[0-9a-f]{40}$'
+          description: null이면 직전 기준점 없음(전체 범위)
+        compareUrl: { type: [string, 'null'], format: uri }
+        aosVersionCode: { type: [integer, 'null'], description: gravit-aos만 }
+        aosVersionName: { type: [string, 'null'], description: gravit-aos만 }
+        versionCodeWarning:
+          type: boolean
+          description: versionCode가 직전 기준점보다 크지 않음(A안 규칙 위반 경고)
+
+    # ---------- 작업 ----------
+    Job:
+      type: object
+      required: [id, type, status, attempt, maxAttempts, steps, createdAt]
+      properties:
+        id: { type: integer, format: int64 }
+        type: { $ref: '#/components/schemas/JobType' }
+        sprintId: { type: [integer, 'null'], format: int64 }
+        status: { $ref: '#/components/schemas/JobStatus' }
+        attempt: { type: integer }
+        maxAttempts: { type: integer }
+        nextRunAt: { type: [string, 'null'], format: date-time, description: 재시도 대기 시각 }
+        cancelRequested: { type: boolean }
+        lastError: { type: [string, 'null'] }
+        steps:
+          type: array
+          items: { $ref: '#/components/schemas/JobStep' }
+        createdAt: { type: string, format: date-time }
+        finishedAt: { type: [string, 'null'], format: date-time }
+
+    JobStep:
+      type: object
+      required: [seq, name, status]
+      properties:
+        seq: { type: integer }
+        name:
+          type: string
+          description: 예) BASELINE, NOTION, FIGMA, DIFF, OPENAPI, INTERPRET, VALIDATE, APPLY
+        status: { $ref: '#/components/schemas/StepStatus' }
+        message: { type: [string, 'null'] }
+        startedAt: { type: [string, 'null'], format: date-time }
+        finishedAt: { type: [string, 'null'], format: date-time }
+
+    # ---------- 체크리스트 ----------
+    Checklist:
+      type: object
+      required: [sprintId, sprintStatus, features]
+      properties:
+        sprintId: { type: integer, format: int64 }
+        sprintStatus: { $ref: '#/components/schemas/SprintStatus' }
+        features:
+          type: array
+          items: { $ref: '#/components/schemas/ChecklistFeature' }
+
+    Feature:
+      type: object
+      required: [id, screenId, name, parts, specStatus]
+      properties:
+        id: { type: integer, format: int64 }
+        screenId: { type: string, examples: [LRN-03] }
+        name: { type: string }
+        route: { type: [string, 'null'] }
+        parts:
+          type: array
+          items: { $ref: '#/components/schemas/Part' }
+        specStatus: { $ref: '#/components/schemas/SpecStatus' }
+        notionUrl: { type: [string, 'null'], format: uri }
+        figmaNodeIds:
+          type: array
+          items: { type: string }
+
+    ChecklistFeature:
+      type: object
+      required: [feature, items]
+      properties:
+        feature: { $ref: '#/components/schemas/Feature' }
+        warnings:
+          type: array
+          items: { type: string }
+          description: 예) 명세 확인 필요, Figma 프레임 없음
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/ChecklistItem' }
+
+    CriterionResult:
+      type: object
+      required: [met, reason]
+      properties:
+        met: { type: boolean }
+        reason: { type: string }
+
+    ClassificationCriteria:
+      type: object
+      description: 자동/수동 분류 기준 5개(01 문서 2-6 (4))
+      required: [specDecidable, preconditionReproducible, observable, noExternalDependency, notSubjective]
+      properties:
+        specDecidable: { $ref: '#/components/schemas/CriterionResult' }
+        preconditionReproducible: { $ref: '#/components/schemas/CriterionResult' }
+        observable: { $ref: '#/components/schemas/CriterionResult' }
+        noExternalDependency: { $ref: '#/components/schemas/CriterionResult' }
+        notSubjective: { $ref: '#/components/schemas/CriterionResult' }
+
+    ChecklistItem:
+      type: object
+      required: [id, featureId, title, expected, parts, classification, automationGap, origin, reviewState, cells, version]
+      properties:
+        id: { type: integer, format: int64 }
+        featureId: { type: integer, format: int64 }
+        title: { type: string }
+        expected: { type: string, description: 명세 근거 기대 결과 }
+        parts:
+          type: array
+          items: { $ref: '#/components/schemas/Part' }
+        classification: { $ref: '#/components/schemas/Classification' }
+        criteria:
+          oneOf:
+            - $ref: '#/components/schemas/ClassificationCriteria'
+            - type: 'null'
+        automationGap:
+          type: boolean
+          description: 기준은 충족하나 대응 테스트가 없어 이번에는 수동
+        testRef: { type: [string, 'null'], description: 테스트 카탈로그 ID }
+        personaKey: { type: [string, 'null'], examples: [learner] }
+        sourceRefs:
+          type: array
+          items: { type: integer, format: int64 }
+          description: 근거 스냅샷 ID
+        origin:
+          type: string
+          enum: [LLM, HUMAN]
+        reviewState: { $ref: '#/components/schemas/ReviewState' }
+        cells:
+          type: array
+          items: { $ref: '#/components/schemas/CheckCell' }
+        version: { type: integer }
+
+    ChecklistItemCreateRequest:
+      type: object
+      required: [featureId, title, expected, parts, classification]
+      properties:
+        featureId: { type: integer, format: int64 }
+        title: { type: string, minLength: 1 }
+        expected: { type: string, minLength: 1 }
+        parts:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/Part' }
+        classification: { $ref: '#/components/schemas/Classification' }
+        testRef: { type: [string, 'null'] }
+        personaKey: { type: [string, 'null'] }
+
+    ChecklistItemUpdateRequest:
+      type: object
+      required: [version]
+      description: 전달한 필드만 변경
+      properties:
+        title: { type: string, minLength: 1 }
+        expected: { type: string, minLength: 1 }
+        parts:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/Part' }
+        classification: { $ref: '#/components/schemas/Classification' }
+        testRef: { type: [string, 'null'] }
+        personaKey: { type: [string, 'null'] }
+        reviewState:
+          type: string
+          enum: [CONFIRMED, REJECTED]
+        version: { type: integer }
+
+    ChecklistConfirmRequest:
+      type: object
+      required: [version]
+      properties:
+        startAutoRun: { type: boolean, default: true }
+        version: { type: integer, description: 스프린트 version }
+
+    ChecklistConfirmResponse:
+      type: object
+      required: [sprint]
+      properties:
+        sprint: { $ref: '#/components/schemas/Sprint' }
+        autoRun:
+          oneOf:
+            - $ref: '#/components/schemas/AutoRunSummary'
+            - type: 'null'
+
+    CheckCell:
+      type: object
+      required: [itemId, part, state, source, version]
+      properties:
+        itemId: { type: integer, format: int64 }
+        part: { $ref: '#/components/schemas/Part' }
+        state: { $ref: '#/components/schemas/CellState' }
+        source:
+          type: string
+          enum: [MANUAL, AUTO]
+        autoRunId: { type: [integer, 'null'], format: int64 }
+        editable: { type: boolean, description: 현재 사용자가 수동 변경 가능한지 }
+        updatedBy: { type: [integer, 'null'], format: int64 }
+        updatedAt: { type: [string, 'null'], format: date-time }
+        version: { type: integer }
+
+    CheckCellUpdateRequest:
+      type: object
+      required: [state, version]
+      properties:
+        state:
+          type: string
+          enum: [UNCHECKED, PASS, FAIL]
+        version: { type: integer }
+
+    CheckCellHistory:
+      type: object
+      required: [fromState, toState, source, changedAt]
+      properties:
+        fromState: { $ref: '#/components/schemas/CellState' }
+        toState: { $ref: '#/components/schemas/CellState' }
+        source:
+          type: string
+          enum: [MANUAL, AUTO]
+        changedBy: { type: [integer, 'null'], format: int64 }
+        autoRunId: { type: [integer, 'null'], format: int64 }
+        changedAt: { type: string, format: date-time }
+
+    # ---------- 자동 실행 ----------
+    RunCreateRequest:
+      type: object
+      properties:
+        itemIds:
+          type: array
+          uniqueItems: true
+          items: { type: integer, format: int64 }
+          description: 생략 시 스프린트의 CONFIRMED AUTO 항목 전체
+
+    RunCounts:
+      type: object
+      required: [total, pass, fail, error, skipped, flaky]
+      properties:
+        total: { type: integer }
+        pass: { type: integer }
+        fail: { type: integer }
+        error: { type: integer }
+        skipped: { type: integer }
+        flaky: { type: integer }
+
+    AutoRunSummary:
+      type: object
+      required: [id, sprintId, status, createdAt]
+      properties:
+        id: { type: integer, format: int64 }
+        sprintId: { type: integer, format: int64 }
+        jobId: { type: integer, format: int64 }
+        status: { $ref: '#/components/schemas/RunStatus' }
+        counts:
+          oneOf:
+            - $ref: '#/components/schemas/RunCounts'
+            - type: 'null'
+        failureReason: { type: [string, 'null'], description: status = FAILED일 때 실행 자체 실패 사유 }
+        createdAt: { type: string, format: date-time }
+        startedAt: { type: [string, 'null'], format: date-time }
+        finishedAt: { type: [string, 'null'], format: date-time }
+
+    PersonaBinding:
+      type: object
+      required: [personaKey, userId]
+      properties:
+        personaKey: { type: string }
+        userId: { type: integer, format: int64, description: 재적재마다 바뀐다 }
+        description: { type: [string, 'null'], description: 페르소나 상태 요약 }
+
+    PersonaSet:
+      type: string
+      enum: [auto, manual]
+
+    PersonaManifest:
+      type: object
+      required: [set, loadedAt, personas]
+      properties:
+        set: { $ref: '#/components/schemas/PersonaSet' }
+        loadedAt: { type: string, format: date-time }
+        personas:
+          type: array
+          items: { $ref: '#/components/schemas/PersonaBinding' }
+
+    PersonaToken:
+      type: object
+      required: [personaKey, userId, accessToken, refreshToken]
+      properties:
+        personaKey: { type: string }
+        userId: { type: integer, format: int64 }
+        accessToken: { type: string }
+        refreshToken: { type: string }
+
+    AutoRun:
+      allOf:
+        - $ref: '#/components/schemas/AutoRunSummary'
+        - type: object
+          required: [baselineId, results]
+          properties:
+            baselineId: { type: integer, format: int64 }
+            personas:
+              type: array
+              items: { $ref: '#/components/schemas/PersonaBinding' }
+            results:
+              type: array
+              items: { $ref: '#/components/schemas/RunCaseResult' }
+
+    RunCaseResult:
+      type: object
+      required: [id, itemId, part, outcome, flaky, attempts]
+      properties:
+        id: { type: integer, format: int64 }
+        itemId: { type: integer, format: int64 }
+        testRef: { type: string }
+        part: { $ref: '#/components/schemas/Part' }
+        outcome: { $ref: '#/components/schemas/CaseOutcome' }
+        flaky: { type: boolean }
+        attempts: { type: integer }
+        durationMs: { type: [integer, 'null'] }
+        errorMessage: { type: [string, 'null'] }
+        evidence:
+          type: array
+          items: { $ref: '#/components/schemas/EvidenceRef' }
+
+    EvidenceRef:
+      type: object
+      required: [id, kind, contentType, sizeBytes, expiresAt, expired]
+      properties:
+        id: { type: integer, format: int64 }
+        kind: { $ref: '#/components/schemas/EvidenceKind' }
+        contentType: { type: string }
+        sizeBytes: { type: integer, format: int64 }
+        expiresAt: { type: string, format: date-time }
+        expired: { type: boolean }
+
+    # ---------- 리뷰 리포트 ----------
+    ReviewReport:
+      type: object
+      required: [sprintId, repos]
+      properties:
+        sprintId: { type: integer, format: int64 }
+        collectedAt: { type: [string, 'null'], format: date-time }
+        repos:
+          type: array
+          items: { $ref: '#/components/schemas/RepoReview' }
+
+    RepoReview:
+      type: object
+      required: [repo, commitSha, checks]
+      properties:
+        repo: { $ref: '#/components/schemas/Repo' }
+        commitSha: { type: string }
+        checks:
+          type: array
+          items: { $ref: '#/components/schemas/ReviewCheck' }
+
+    ReviewCheck:
+      type: object
+      required: [name, status]
+      description: GitHub check run 요약
+      properties:
+        name: { type: string }
+        status:
+          type: string
+          enum: [queued, in_progress, completed, waiting, requested, pending]
+        conclusion:
+          type: [string, 'null']
+          enum: [success, failure, neutral, cancelled, skipped, timed_out, action_required, stale, null]
+        detailsUrl: { type: [string, 'null'], format: uri }
+        completedAt: { type: [string, 'null'], format: date-time }
+
+    # ---------- 스프린트 리포트 ----------
+    SprintReport:
+      type: object
+      required: [sprint, progress, unresolvedFails, automationGaps, warnings]
+      properties:
+        sprint: { $ref: '#/components/schemas/SprintSummary' }
+        progress:
+          type: array
+          items: { $ref: '#/components/schemas/PartProgress' }
+        latestRun:
+          oneOf:
+            - $ref: '#/components/schemas/AutoRunSummary'
+            - type: 'null'
+        unresolvedFails:
+          type: array
+          items: { $ref: '#/components/schemas/FailEntry' }
+        automationGaps:
+          type: array
+          description: 자동화 후보(C7 입력)
+          items: { $ref: '#/components/schemas/ItemRef' }
+        warnings:
+          type: array
+          items: { $ref: '#/components/schemas/ReportWarning' }
+        review:
+          oneOf:
+            - $ref: '#/components/schemas/ReviewReport'
+            - type: 'null'
+
+    ItemRef:
+      type: object
+      required: [itemId, screenId, title]
+      properties:
+        itemId: { type: integer, format: int64 }
+        screenId: { type: string }
+        title: { type: string }
+
+    FailEntry:
+      allOf:
+        - $ref: '#/components/schemas/ItemRef'
+        - type: object
+          required: [part, source]
+          properties:
+            part: { $ref: '#/components/schemas/Part' }
+            source:
+              type: string
+              enum: [MANUAL, AUTO]
+            autoRunId: { type: [integer, 'null'], format: int64 }
+            updatedAt: { type: [string, 'null'], format: date-time }
+
+    ReportWarning:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum: [VERSION_CODE_NOT_INCREASED, SPEC_NEEDS_CHECK, FIGMA_FRAME_MISSING, ITEM_GENERATION_FAILED, NOTION_WRITE_FAILED]
+        message: { type: string }
+        screenId: { type: [string, 'null'] }
