@@ -48,17 +48,17 @@ class FigmaFrameParserTest {
                     {"id": "4:2", "name": "LRN-01", "type": "FRAME", "absoluteBoundingBox": {"width": 1920}},
                     {"id": "4:3", "name": "LRN-02", "type": "FRAME", "absoluteBoundingBox": {"width": 1920}},
                     {"id": "4:4", "name": "QUIZ-03/A", "type": "FRAME", "absoluteBoundingBox": {"width": 1920}},
-                    {"id": "4:5", "name": "최근 응시 이력 페이지", "type": "FRAME", "absoluteBoundingBox": {"width": 1920}},
-                    {"id": "4:6", "name": "Rectangle 12", "type": "RECTANGLE"}
+                    {"id": "4:5", "name": "Rectangle 12", "type": "RECTANGLE"}
                   ]},
-                  {"id": "4:7", "name": "INTERVIEW SIMULATOR", "type": "SECTION", "children": [
+                  {"id": "4:6", "name": "INTERVIEW SIMULATOR", "type": "SECTION", "children": [
+                    {"id": "4:7", "name": "AI-08", "type": "FRAME", "absoluteBoundingBox": {"width": 1920}},
                     {"id": "4:8", "name": "AI-08", "type": "FRAME", "absoluteBoundingBox": {"width": 1920}},
                     {"id": "4:9", "name": "AI-08", "type": "FRAME", "absoluteBoundingBox": {"width": 1920}},
-                    {"id": "4:10", "name": "AI-08", "type": "FRAME", "absoluteBoundingBox": {"width": 1920}},
-                    {"id": "4:11", "name": "AI-HOME-01", "type": "FRAME", "absoluteBoundingBox": {"width": 1921.5}}
+                    {"id": "4:10", "name": "AI-HOME-01/DATA", "type": "FRAME", "absoluteBoundingBox": {"width": 1921.5}},
+                    {"id": "4:11", "name": "미확인/INTERVIEW SIMULATOR-1", "type": "FRAME", "absoluteBoundingBox": {"width": 1920}},
+                    {"id": "4:12", "name": "최근 응시 이력 페이지", "type": "FRAME", "absoluteBoundingBox": {"width": 1920}}
                   ]},
-                  {"id": "4:12", "name": "OTHER", "type": "SECTION", "children": [
-                    {"id": "4:13", "name": "미확인/OTHER-1", "type": "FRAME", "absoluteBoundingBox": {"width": 1920}},
+                  {"id": "4:13", "name": "OTHER", "type": "SECTION", "children": [
                     {"id": "4:14", "name": "묶음", "type": "SECTION", "children": [
                       {"id": "4:15", "name": "SETTING-01", "type": "FRAME", "absoluteBoundingBox": {"width": 1920}}
                     ]}
@@ -78,7 +78,8 @@ class FigmaFrameParserTest {
                     {"id": "5:6", "name": "LRN-01", "type": "FRAME", "absoluteBoundingBox": {"width": 360}}
                   ]},
                   {"id": "5:7", "name": "OTHER", "type": "SECTION", "children": [
-                    {"id": "5:8", "name": "SETTING-01", "type": "FRAME", "absoluteBoundingBox": {"width": 1920}}
+                    {"id": "5:8", "name": "미확인/OTHER-1", "type": "FRAME", "absoluteBoundingBox": {"width": 360}},
+                    {"id": "5:9", "name": "SETTING-01", "type": "FRAME", "absoluteBoundingBox": {"width": 1920}}
                   ]}
                 ]},
                 {"id": "6:0", "name": "메모", "type": "SECTION", "children": []},
@@ -148,7 +149,7 @@ class FigmaFrameParserTest {
                     .orElseThrow();
 
             // then
-            assertThat(screen.frames()).extracting(FigmaFrameDto::nodeId).containsExactly("4:8", "4:9", "4:10");
+            assertThat(screen.frames()).extracting(FigmaFrameDto::nodeId).containsExactly("4:7", "4:8", "4:9");
             assertThat(screen.states()).isEmpty();
         }
 
@@ -217,10 +218,10 @@ class FigmaFrameParserTest {
         @Test
         void 슬래시_앞뒤_공백은_잘라낸다() {
             // when
-            FigmaQaFramesDto result = FigmaFrameParser.parse("AbC123", pageWithFrame("LRN-02 / EMPTY", 1920.0), SPRINT_KEY);
+            FigmaQaFramesDto result = FigmaFrameParser.parse("AbC123", pageWithFrame("MY-02 / EMPTY", 1920.0), SPRINT_KEY);
 
             // then
-            assertThat(result.findScreen(WEB, "LRN-02").orElseThrow().states()).containsExactly("EMPTY");
+            assertThat(result.findScreen(WEB, "MY-02").orElseThrow().states()).containsExactly("EMPTY");
         }
     }
 
@@ -237,12 +238,13 @@ class FigmaFrameParserTest {
             assertThat(result.warnings())
                     .extracting(FigmaFrameWarningDto::type, FigmaFrameWarningDto::platform, FigmaFrameWarningDto::nodeId, FigmaFrameWarningDto::name)
                     .containsExactly(
-                            tuple(INVALID_FRAME_NAME, WEB, "4:5", "최근 응시 이력 페이지"),
-                            tuple(UNCONFIRMED_FRAME, WEB, "4:13", "미확인/OTHER-1"),
+                            tuple(UNCONFIRMED_FRAME, WEB, "4:11", "미확인/INTERVIEW SIMULATOR-1"),
+                            tuple(INVALID_FRAME_NAME, WEB, "4:12", "최근 응시 이력 페이지"),
                             tuple(NESTED_SECTION, WEB, "4:14", "묶음"),
                             tuple(UNKNOWN_SECTION, WEB, "4:16", "ARCHIVE"),
                             tuple(FRAME_OUTSIDE_AREA, WEB, "4:18", "UP-02-01"),
-                            tuple(PLATFORM_WIDTH_MISMATCH, AOS, "5:8", "SETTING-01"),
+                            tuple(UNCONFIRMED_FRAME, AOS, "5:8", "미확인/OTHER-1"),
+                            tuple(PLATFORM_WIDTH_MISMATCH, AOS, "5:9", "SETTING-01"),
                             tuple(UNKNOWN_SECTION, null, "6:0", "메모"),
                             tuple(FRAME_OUTSIDE_PLATFORM, null, "6:1", "QUIZ-02/A")
                     );
@@ -257,7 +259,7 @@ class FigmaFrameParserTest {
             assertThat(result.screens())
                     .flatExtracting(FigmaScreenDto::frames)
                     .extracting(FigmaFrameDto::nodeId)
-                    .doesNotContain("4:5", "4:13", "4:15", "4:17", "4:18", "6:1");
+                    .doesNotContain("4:11", "4:12", "4:15", "4:17", "4:18", "5:8", "6:1");
         }
 
         @Test
@@ -268,7 +270,7 @@ class FigmaFrameParserTest {
             // then
             assertThat(result.findScreen(AOS, "SETTING-01").orElseThrow().frames())
                     .extracting(FigmaFrameDto::nodeId, FigmaFrameDto::width)
-                    .containsExactly(tuple("5:8", 1920.0));
+                    .containsExactly(tuple("5:9", 1920.0));
         }
 
         @ParameterizedTest
