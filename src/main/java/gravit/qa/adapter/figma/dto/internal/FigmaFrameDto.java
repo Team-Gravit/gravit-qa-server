@@ -3,6 +3,8 @@ package gravit.qa.adapter.figma.dto.internal;
 public record FigmaFrameDto(
         String nodeId,
         String name,
-        String sectionName
+        String state,
+        String sectionName,
+        Double width
 ) {
 }
