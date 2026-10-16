@@ -37,6 +37,8 @@
 | C1-13 | LLM 출력 재요청 | 2회 |
 | C1-14 | 수동 페르소나 재적재 | 확정 시 1회 + 수동 버튼 |
 | C1-15 | gravit-qa-server 저장소 | 골격을 먼저 만들어 전달, 사용자가 저장소 생성 후 업로드 |
+| C1-16 | LLM 경로 | 기존 litellm-gw 공유(A안). 같은 구독 계정 한도를 면접 채점과 나눠 씀 |
+| C1-17 | 화면 ID 체계 | gravit-web fe-implement-spec §4(Figma 프레임명)를 그대로 따름. 플랫폼은 Section, 상태 변형은 같은 이름 반복 |
 
 ---
 
@@ -45,7 +47,7 @@
 | 용어 | 정의 |
 |---|---|
 | 스프린트 | QA 1회차. Notion 스프린트 DB의 행 1개와 1:1 |
-| 기능 | 화면 ID 단위(`LRN-03` 등). Notion 기능 명세 DB의 행 1개와 1:1 |
+| 기능 | 화면 ID 단위(`L.7.1` 등, Figma 프레임명 = gravit-web fe-implement-spec §4 체계). Notion 기능 명세 DB의 행 1개와 1:1 |
 | 체크 항목 | 기능 1개에 속한 검수 항목. LLM이 초안을 만들고 사람이 확정 |
 | 파트 | `SERVER` / `WEB` / `APP`. 체크 항목 × 파트 = 체크 셀 |
 | 기준점 | 스프린트 QA 시점의 저장소별 release 브랜치 커밋 SHA 묶음 |
@@ -88,7 +90,7 @@
 | **qa-e2e** (컨테이너 2) | 자동 실행 작업 소비: 픽스처 재적재 → 토큰 발급 → Playwright 테스트 → 결과·증적 기록 | API 제공, LLM 호출 |
 | gravit-server (기존) | 테스트 API: 페르소나 데이터셋 재적재, userId 토큰 발급 | QA 상태 보관 |
 | 각 저장소 CI (C8) | lint·detekt·커버리지·LLM PR 리뷰 실행 | — |
-| litellm-gw (기존) | LLM 프록시. gravit-qa 전용 virtual key | — |
+| litellm-gw (기존) | LLM 프록시. 뒤는 codex-lb → ChatGPT 구독 계정 1개(면접 채점과 한도 공유) [결정 A안] | — |
 
 [결정 C1-1] qa-api와 qa-e2e는 **같은 이미지, 다른 Spring 프로필**(`api` / `e2e`)로 기동한다. 작업 테이블을 공유하고 작업 유형으로 소비 대상을 나눈다. Chromium 의존성 때문에 이미지 크기가 커지는 것이 문제가 되면 C9에서 이미지를 분리한다.
 
@@ -177,7 +179,7 @@ job (sprint_id nullable) 1─N job_step
 
 | 컬럼 | 설명 |
 |---|---|
-| id, screen_id UNIQUE | `LRN-03` |
+| id, screen_id UNIQUE | `L.7.1` |
 | name, route, parts(text[]) | |
 | notion_page_id UNIQUE | |
 | spec_status | `DRAFT`(역문서화 초안) / `NEEDS_CHECK`(확인 필요) / `CONFIRMED`(확정) |
@@ -297,7 +299,7 @@ LIMIT 1;
 |---|---|---|---|
 | 1 | 기준점 확정 | GitHub API로 3개 저장소 `release` HEAD SHA 조회. 직전 기준점과 비교. `gravit-aos` release의 `build.gradle.kts`에서 `versionCode`/`versionName` 추출, 증가 여부 검사 | 결정적 |
 | 2 | Notion 수집 | 스프린트 행 + `대상 기능` relation의 기능 명세 페이지 본문 | 결정적 |
-| 3 | Figma 수집 | QA 페이지 → 스프린트명 Section → 프레임명(`{화면ID}[_상태][_WEB\|_AOS]`) 파싱, 대상 기능 프레임 PNG 저장 | 결정적 |
+| 3 | Figma 수집 | QA 페이지 → 스프린트명 Section → `WEB`/`AOS` Section(플랫폼) → 프레임명 = 화면 ID(`^(O\|M\|L\|LG\|MY\|A\|E\|W\|R)\.\d+([.-]\d+)*$`). 같은 ID가 여러 개면 상태 변형. `미확인/…`은 경고로 보고. 대상 기능 프레임 PNG 저장 (규칙: 02 가이드 3-3) | 결정적 |
 | 4 | 코드 diff 수집 | GitHub compare(`previous..current`)의 변경 파일·패치 | 결정적 |
 | 5 | OpenAPI 수집 | dev `/v3/api-docs`, 기능의 `관련 API` operationId만 추출 | 결정적 |
 | 6 | 해석 | 기능 1개당 LLM 1회: 체크 항목 초안 + 기준 5개 판정 + 페르소나 제안 | LLM |
@@ -327,7 +329,7 @@ LIMIT 1;
 | 4 | 판정 | 테스트 결과 → `run_case_result` → 해당 셀 `PASS`/`FAIL`(`source = AUTO`). `ERROR`·`SKIPPED`는 셀을 바꾸지 않음 |
 | 5 | 증적 | 실패 시 스크린샷·trace·HTTP 로그, 성공 시 최종 스크린샷 1장 [결정 C1-9] |
 
-**테스트 카탈로그** [설계]: gravit-qa-server 저장소 `e2e/` 아래 JUnit 5 + Playwright for Java 테스트. 각 테스트에 카탈로그 ID(`@QaTest("LRN-03.empty-state")`)를 붙이고, 빌드 시 카탈로그 목록을 생성해 셋업 작업이 참조한다.
+**테스트 카탈로그** [설계]: gravit-qa-server 저장소 `e2e/` 아래 JUnit 5 + Playwright for Java 테스트. 각 테스트에 카탈로그 ID(`@QaTest("L.7.1.empty-state")`)를 붙이고, 빌드 시 카탈로그 목록을 생성해 셋업 작업이 참조한다.
 
 **웹 대상 주소** [결정]: `https://dev.gravit.inuappcenter.kr/`. [확인 필요] 이 배포가 어느 브랜치를 반영하는지(release 기준점 SHA와 일치해야 "테스트한 코드 = 기준점 코드"가 성립).
 
@@ -421,7 +423,7 @@ NOT_APPLICABLE              (REVIEW 단계에서 parts로 결정, 이후 고정)
 | Figma | PAT(읽기 scope) | `.env` |
 | Notion | Integration 토큰(chatbot과 공유) | `.env` |
 | GitHub | Fine-grained PAT(public read-only) | `.env` |
-| litellm-gw | gravit-qa 전용 virtual key | `.env` |
+| litellm-gw | **기존 master key** [사실: 게이트웨이에 DB 없음 → virtual key 불가, 2026-10-16 확인] | `.env` `LITELLM_API_KEY` |
 | gravit-server 테스트 API | **현재 없음(permitAll)** → #15에서 QA 서비스 키 도입 예정 | `.env` |
 
 ---
@@ -434,9 +436,9 @@ NOT_APPLICABLE              (REVIEW 단계에서 parts로 결정, 이후 고정)
 | qa-api | `deploy.resources.limits` 필수 | cpus/memory [확인 필요] |
 | qa-e2e | 동일. Chromium 실행 고려 | cpus/memory [확인 필요] |
 | e2e 동시 실행 | 워커 내 동시 작업 1 | 시작값 1 |
-| 네트워크 | `llm-net`(external) 참여 → `litellm-gw` 접근 | [사실] 네트워크명 |
+| 네트워크 | `llm-net`(external) 참여 → `litellm-gw` 접근. `litellm-gw`는 `codex-lb-tailscale`의 네트워크 별칭이고, `litellm` 컨테이너(`ghcr.io/berriai/litellm:main-latest`)가 그 네트워크를 공유하는 사이드카. 설정 파일 `/home/serverking/gravit/llm-api/litellm_config.yaml`. 등록 모델: `codex-sol`, `codex-terra`, `codex-luna`, `gpt-transcribe` | [사실] 2026-10-16 서버 확인 |
 | dev 서버 부하 | 테스트 대상이 같은 장비 → 자동 실행은 동시 1건, 케이스 순차 실행 | |
-| LLM | virtual key의 `max_budget`·`rpm_limit` | 값 [확인 필요] |
+| LLM | 구독 한도를 면접 채점과 공유. 게이트웨이에서 키별 제한을 걸 수 없으므로(DB 없음) **앱에서** 동시 호출 1 + 분당 호출 상한 + 429 연속 시 중단 | 분당 상한 시작값 5 [설계] |
 | 증적 볼륨 | 앱 수준 용량 한도 + **보존 30일 [결정 C1-10]**. 한도 초과 시 오래된 증적부터 삭제, 그래도 부족하면 새 실행 거부(507) [결정 C1-11] | 경로·한도 [확인 필요] |
 
 [설계] 기본 Docker local 볼륨 드라이버는 용량 한도를 강제하지 않으므로, 한도는 `evidence.size_bytes` 합계로 앱이 관리한다. `EVIDENCE_CLEANUP` 작업을 하루 1회 실행한다.
@@ -535,7 +537,7 @@ NOT_APPLICABLE              (REVIEW 단계에서 parts로 결정, 이후 고정)
 | Figma | 429, 5xx, 타임아웃 | `Retry-After` 있으면 준수, 없으면 지수 백오프 최대 3회 | 403·404 |
 | GitHub | 5xx, 2차 한도(403/429 + `retry-after`/`x-ratelimit-reset`) | 헤더 시각까지 대기 후 재시도 | 404(브랜치 없음 → 준비 실패 사유로 표시) |
 | dev OpenAPI | 5xx, 타임아웃 | 백오프 3회 | — |
-| LLM | 5xx, 429, 타임아웃 | 백오프 3회 | 예산 초과(→ 준비 실패, 사유 노출) |
+| LLM | 5xx, 429, 타임아웃 | 백오프 3회. 429 연속 시 즉시 중단(구독 계정 잠김 방지) | 401·403(키 문제 → 준비 실패, 사유 노출) |
 | LLM 출력 | 스키마·참조 무결성 실패 | 오류를 붙여 재요청 최대 2회 | 3회째 실패 시 해당 기능만 "초안 생성 실패" 항목 1개로 남기고 계속 |
 | 픽스처 재적재 | 5xx, 타임아웃 | 1회 재시도 | 4xx → 실행 `FAILED` |
 | 테스트 케이스 | 실패 | 1회 재실행. 재실행 성공 시 `PASS` + `flaky = true` | `ERROR`는 재실행하지 않음 |
