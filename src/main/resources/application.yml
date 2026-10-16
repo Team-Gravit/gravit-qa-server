@@ -48,3 +48,37 @@ qa:
     job-types: []
     poll-interval-ms: 5000
     heartbeat-interval-ms: 30000
+  adapter:
+    retry:
+      max-retries: 3
+      backoff-base: 1s
+      max-wait: 60s
+    github:
+      base-url: https://api.github.com
+      token: ${GITHUB_TOKEN:}
+      owner: Team-Gravit
+      timeout: 10s
+    notion:
+      base-url: https://api.notion.com
+      token: ${NOTION_TOKEN:}
+      version: "2022-06-28"
+      sprint-database-id: 4e53389542c34a339a856820e77ccefc
+      spec-database-id: 43fc286e87ce4ae3862eabf24d9096b3
+      timeout: 30s
+    figma:
+      base-url: https://api.figma.com
+      token: ${FIGMA_TOKEN:}
+      timeout: 30s
+    openapi:
+      url: https://grav-it-dev.inuappcenter.kr/v3/api-docs
+      timeout: 30s
+    llm:
+      base-url: http://litellm-gw:4000
+      api-key: ${LITELLM_API_KEY:}
+      model: codex-terra
+      timeout: 120s
+      max-requests-per-minute: 5
+      max-output-retries: 2
+      max-consecutive-rate-limits: 2
+  storage:
+    root: /data/evidence

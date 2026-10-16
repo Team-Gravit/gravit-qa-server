@@ -1,0 +1,11 @@
+package gravit.qa.adapter.figma.domain;
+
+public enum FigmaFrameWarningType {
+
+    QA_PAGE_NOT_FOUND,
+    SPRINT_SECTION_NOT_FOUND,
+    UNCONFIRMED_FRAME,
+    INVALID_FRAME_NAME,
+    UNKNOWN_SECTION,
+    FRAME_OUTSIDE_PLATFORM
+}
