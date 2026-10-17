@@ -12,4 +12,5 @@ out/
 *.log
 evidence/
 
-/docs/
+/docs/*
+!/docs/deploy-runbook.md

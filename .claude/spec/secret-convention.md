@@ -4,8 +4,8 @@ description: gravit-qa 환경 변수·시크릿 목록과 보관 규칙
 
 # Secret Convention
 
-gravit-qa는 서버의 `.env`(compose 프로젝트 디렉토리)에서 환경 변수로 값을 받는다. 값은 저장소에 커밋하지 않는다.
-CD 워크플로를 추가하면 같은 이름을 GitHub Secrets에 둔다.
+gravit-qa는 서버의 `.env`(compose 프로젝트 디렉토리 `/home/serverking/gravit/qa`)에서 환경 변수로 값을 받는다. 값은 저장소에 커밋하지 않는다.
+앱 변수는 서버 `.env`에만 둔다. CD(`cd.yml`)는 `.env`를 읽지도 쓰지도 않고 앱 변수를 넘기지 않는다. 그래서 아래 앱 변수는 GitHub Secrets에 두지 않는다.
 
 | 변수 | 용도 | 비고 |
 |---|---|---|
@@ -19,6 +19,26 @@ CD 워크플로를 추가하면 같은 이름을 GitHub Secrets에 둔다.
 | `GRAVIT_TEST_API_KEY` | gravit-server 테스트 API 서비스 키 | #15 처리 후 추가 |
 
 외부 연동 base-url과 DB ID 같은 비밀이 아닌 값은 `application.yml`의 `qa.adapter.*`에 둔다.
+
+### compose 보간 (서버 `.env`, 비밀 아님)
+
+`docker-compose-qa.yml`을 해석할 때 쓴다. 컨테이너에는 넘기지 않는다.
+
+| 변수 | 용도 | 비고 |
+|---|---|---|
+| `DOCKER_HUB_USERNAME` | 이미지 이름 `{값}/gravit-qa-server` | CD는 셸 환경 변수로 넘기고(셸 값이 `.env`보다 우선), `.env` 값은 서버에서 compose를 직접 돌릴 때 쓴다 |
+| `QA_API_PORT` | qa-api 호스트 포트 | |
+| `QA_API_CPUS`, `QA_API_MEMORY` | qa-api 자원 한도 | |
+| `QA_E2E_CPUS`, `QA_E2E_MEMORY` | qa-e2e 자원 한도 | qa-e2e를 띄우지 않아도 비어 있으면 compose 해석이 실패한다 |
+
+### CD 전용 (GitHub Secrets)
+
+gravit-server CD와 같은 이름을 쓴다. 저장소 시크릿 또는 이 저장소에 접근을 허용한 조직 시크릿이다.
+
+| 변수 | 용도 |
+|---|---|
+| `DOCKER_HUB_USERNAME`, `DOCKER_HUB_PASSWORD` | 이미지 push |
+| `APPCENTER_SERVER_IP`, `APPCENTER_SERVER_PORT`, `APPCENTER_SERVER_USERNAME`, `APPCENTER_SERVER_PASSWORD` | 앱센터 서버 scp, ssh |
 
 ### 스모크 테스트 전용 (서버 `.env`에는 두지 않는다)
 

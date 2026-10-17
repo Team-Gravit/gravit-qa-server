@@ -41,3 +41,7 @@ QA_TEST_DB_USERNAME=postgres QA_TEST_DB_PASSWORD=... ./gradlew test   # 기존 D
 
 `docker-compose-qa.yml` 하나로 같은 이미지를 `api` / `e2e` 프로필 두 컨테이너로 띄운다. 두 컨테이너 모두 자원 한도(`deploy.resources.limits`)가 필수다.
 `llm-net`(external) 네트워크에 참여한다.
+
+- CD(`.github/workflows/cd.yml`): dev push 시 CI → 이미지 빌드(`latest`, 커밋 SHA 태그) → Docker Hub push → 서버 `/home/serverking/gravit/qa`에서 qa-api만 갱신하고 healthy를 기다린다. qa-e2e는 C7 전까지 올리지 않는다
+- 서버 `.env`는 사람이 관리하고 CD는 건드리지 않는다
+- 서버 준비, 첫 배포, 스모크 확인, 되돌리기: [`docs/deploy-runbook.md`](docs/deploy-runbook.md)
