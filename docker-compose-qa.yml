@@ -8,6 +8,7 @@ services:
       - TZ=Asia/Seoul
       - SPRING_PROFILES_ACTIVE=api
       - QA_WORKER_ID=qa-api
+      - JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=75.0
       - QA_DB_URL
       - QA_DB_USERNAME
       - QA_DB_PASSWORD
@@ -21,6 +22,12 @@ services:
     networks:
       - gravit-qa
       - llm-net
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 90s
     deploy:
       resources:
         limits:
