@@ -1,0 +1,11 @@
+package gravit.qa.sprint.domain;
+
+public enum WarningCode {
+    VERSION_CODE_NOT_INCREASED,
+    SPEC_NEEDS_CHECK,
+    FIGMA_FRAME_MISSING,
+    ITEM_GENERATION_FAILED,
+    NOTION_WRITE_FAILED,
+    OPENAPI_OPERATION_MISSING,
+    LLM_INPUT_TRUNCATED
+}

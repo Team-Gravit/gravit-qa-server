@@ -34,11 +34,11 @@ class SnapshotFileStoreTest {
             SnapshotFileStore store = new SnapshotFileStore(new StorageProps(root.toString()));
 
             // when
-            StoredSnapshotDto stored = store.save(12L, SnapshotSource.NOTION_SPEC, "L.7.1.json", "hello");
+            StoredSnapshotDto stored = store.save(12L, 3L, SnapshotSource.NOTION_SPEC, "L.7.1.json", "hello");
 
             // then
             assertSoftly(softly -> {
-                softly.assertThat(stored.storagePath()).isEqualTo("snapshots/12/NOTION_SPEC/L.7.1.json");
+                softly.assertThat(stored.storagePath()).isEqualTo("snapshots/12/3/NOTION_SPEC/L.7.1.json");
                 softly.assertThat(stored.contentHash()).isEqualTo(HELLO_SHA256);
                 softly.assertThat(stored.sizeBytes()).isEqualTo(5);
             });
@@ -49,13 +49,13 @@ class SnapshotFileStoreTest {
         void 같은_이름으로_다시_저장하면_덮어쓰고_임시_파일을_남기지_않는다() throws Exception {
             // given
             SnapshotFileStore store = new SnapshotFileStore(new StorageProps(root.toString()));
-            store.save(12L, SnapshotSource.FIGMA_FRAME, "4-2.png", new byte[]{1, 2, 3});
+            store.save(12L, 3L, SnapshotSource.FIGMA_FRAME, "4-2.png", new byte[]{1, 2, 3});
 
             // when
-            StoredSnapshotDto stored = store.save(12L, SnapshotSource.FIGMA_FRAME, "4-2.png", new byte[]{9});
+            StoredSnapshotDto stored = store.save(12L, 3L, SnapshotSource.FIGMA_FRAME, "4-2.png", new byte[]{9});
 
             // then
-            Path directory = root.resolve("snapshots/12/FIGMA_FRAME");
+            Path directory = root.resolve("snapshots/12/3/FIGMA_FRAME");
             assertThat(Files.readAllBytes(root.resolve(stored.storagePath()))).containsExactly(9);
             try (var files = Files.list(directory)) {
                 assertThat(files.map(path -> path.getFileName().toString())).containsExactly("4-2.png");
@@ -74,7 +74,7 @@ class SnapshotFileStoreTest {
             SnapshotFileStore store = new SnapshotFileStore(new StorageProps(root.toString()));
 
             // when & then
-            assertThatThrownBy(() -> store.save(12L, SnapshotSource.OPENAPI, fileName, "x"))
+            assertThatThrownBy(() -> store.save(12L, 3L, SnapshotSource.OPENAPI, fileName, "x"))
                     .isInstanceOf(IllegalArgumentException.class);
         }
 
@@ -84,7 +84,7 @@ class SnapshotFileStoreTest {
             SnapshotFileStore store = new SnapshotFileStore(new StorageProps(root.toString()));
 
             // when & then
-            assertThatThrownBy(() -> store.save(0L, SnapshotSource.OPENAPI, "api-docs.json", "x"))
+            assertThatThrownBy(() -> store.save(0L, 3L, SnapshotSource.OPENAPI, "api-docs.json", "x"))
                     .isInstanceOf(IllegalArgumentException.class);
         }
     }

@@ -13,6 +13,8 @@
 | 화면 안내(`guide`) | 15 |
 | Figma QA 페이지 해석(화면 ID, 상태, 경고) | 5-2, 가이드 3-3 → [`figma-qa-page.md`](figma-qa-page.md) |
 | 외부 연동 결정값(재시도, 타임아웃, LLM 호출 제한) | 8, 10 → [`external-adapters.md`](external-adapters.md) |
+| 셋업 작업(단계별 처리·실패, 라벨 변환, 분류, LLM 입력·출력, 스냅샷, 상태 동기화) | 5-2, 10 → [`setup-job.md`](setup-job.md) |
+| 체크리스트(편집 가능 상태, 셀 잠금, 확정·종료 조건, 경고 위치, guide 표) | 5-1, 5-3, 5-5, 5-7, 15-3 → [`checklist.md`](checklist.md) |
 
 ## 작업 큐
 

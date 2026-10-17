@@ -13,13 +13,13 @@ src/main/java/gravit/qa/
 │
 ├── job/                 # 작업 큐(등록·점유·heartbeat·재시도·회수), 작업 처리기 계약
 ├── sprint/              # 스프린트, 기준점 (C4)
-├── feature/             # 기능 명세 사본 (C3)
-├── snapshot/            # 수집 스냅샷 (C3)
+├── feature/             # 기능 명세 사본, 스프린트 대상 기능 (C4)
+├── snapshot/            # 수집 스냅샷 (파일 저장 C3, 행 C4)
 ├── checklist/           # 체크 항목, 체크 셀, 셀 이력 (C4)
-├── run/                 # 자동 실행, 케이스 결과 (C7)
+├── run/                 # 자동 실행, 케이스 결과 (C7, 확정 시 auto_run 생성만 C4)
 ├── evidence/            # 증적 파일 (C7)
 ├── review/              # 코드 검수 리포트 수집 (C8)
-├── persona/             # 페르소나 매니페스트, 토큰 발급 (C7)
+├── persona/             # 페르소나 매니페스트, 토큰 발급 (C7, 페르소나 키 목록만 C4)
 └── adapter/             # 외부 연동: figma, notion, github, openapi, llm, gravitserver (C3)
 ```
 

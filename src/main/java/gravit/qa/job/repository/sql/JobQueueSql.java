@@ -130,6 +130,18 @@ public class JobQueueSql {
                 last_error = :error,
                 locked_by = NULL, locked_at = NULL, heartbeat_at = NULL
             WHERE status = 'RUNNING' AND heartbeat_at < :staleBefore
-            RETURNING id
+            RETURNING id, type, sprint_id, status
+            """;
+
+    public static final String SELECT_LATEST_JOB_ID = """
+            SELECT MAX(id)
+            FROM job
+            WHERE sprint_id = :sprintId AND type = :type
+            """;
+
+    public static final String SELECT_SPRINT_IDS_WITH_ACTIVE_JOB = """
+            SELECT DISTINCT sprint_id
+            FROM job
+            WHERE sprint_id IN (:sprintIds) AND type = :type AND status IN ('QUEUED', 'RUNNING')
             """;
 }

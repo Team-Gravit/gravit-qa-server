@@ -13,6 +13,7 @@ import gravit.qa.job.support.JobContext;
 import gravit.qa.job.support.JobHandler;
 import gravit.qa.job.support.JobRunner;
 import gravit.qa.job.support.NonRetryableJobException;
+import gravit.qa.sprint.handler.SetupJobHandler;
 import gravit.qa.support.QaSpringBootTest;
 import gravit.qa.support.TestClock;
 import gravit.qa.support.TestClockConfig;
@@ -24,6 +25,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 
 import java.time.Duration;
 import java.time.OffsetDateTime;
@@ -36,6 +38,8 @@ import static gravit.qa.global.exception.domain.CustomErrorCode.JOB_NOT_FOUND;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.SoftAssertions.assertSoftly;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 
 @QaSpringBootTest
 @Import(JobQueueIntegrationTest.StubHandlerConfig.class)
@@ -53,8 +57,8 @@ class JobQueueIntegrationTest {
     @Autowired
     private StubJobHandler stubJobHandler;
 
-    @Autowired
-    private StubSetupJobHandler stubSetupJobHandler;
+    @MockitoSpyBean
+    private SetupJobHandler setupJobHandler;
 
     @Autowired
     private TestClock testClock;
@@ -300,10 +304,12 @@ class JobQueueIntegrationTest {
         }
 
         private void stubSetupHandler(long jobId) {
-            stubSetupJobHandler.behave(context -> {
+            doAnswer(invocation -> {
+                JobContext context = invocation.getArgument(0);
                 context.step("BASELINE", () -> jobCommandService.requestCancel(jobId));
                 context.step("NOTION", () -> { });
-            });
+                return null;
+            }).when(setupJobHandler).handle(any());
         }
     }
 
@@ -390,35 +396,11 @@ class JobQueueIntegrationTest {
         }
     }
 
-    static class StubSetupJobHandler implements JobHandler {
-
-        private volatile Consumer<JobContext> behavior = context -> { };
-
-        void behave(Consumer<JobContext> behavior) {
-            this.behavior = behavior;
-        }
-
-        @Override
-        public JobType type() {
-            return JobType.SETUP;
-        }
-
-        @Override
-        public void handle(JobContext context) {
-            behavior.accept(context);
-        }
-    }
-
     static class StubHandlerConfig {
 
         @Bean
         StubJobHandler stubJobHandler() {
             return new StubJobHandler();
-        }
-
-        @Bean
-        StubSetupJobHandler stubSetupJobHandler() {
-            return new StubSetupJobHandler();
         }
     }
 }

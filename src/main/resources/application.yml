@@ -80,5 +80,7 @@ qa:
       max-requests-per-minute: 5
       max-output-retries: 2
       max-consecutive-rate-limits: 2
+  setup:
+    max-prompt-chars: 30000
   storage:
     root: /data/evidence

@@ -5,11 +5,15 @@ import gravit.qa.job.config.JobProps;
 import gravit.qa.job.config.WorkerProps;
 import gravit.qa.job.domain.JobStatus;
 import gravit.qa.job.domain.JobType;
+import gravit.qa.job.dto.event.JobTerminatedEvent;
 import gravit.qa.job.dto.internal.ClaimedJobDto;
+import gravit.qa.job.dto.internal.ReapedJobDto;
 import gravit.qa.job.repository.custom.JobQueueRepository;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
@@ -40,12 +44,16 @@ public class JobRunner {
     private final JobQueueRepository jobQueueRepository;
 
     private final Clock clock;
+    private final ApplicationEventPublisher eventPublisher;
+    private final TransactionTemplate transactionTemplate;
     private final JobProps jobProps;
 
     public JobRunner(
             List<JobHandler> jobHandlers,
             JobQueueRepository jobQueueRepository,
             Clock clock,
+            ApplicationEventPublisher eventPublisher,
+            TransactionTemplate transactionTemplate,
             JobProps jobProps,
             WorkerProps workerProps
     ) {
@@ -54,6 +62,8 @@ public class JobRunner {
         this.workerId = resolveWorkerId(workerProps.id());
         this.jobQueueRepository = jobQueueRepository;
         this.clock = clock;
+        this.eventPublisher = eventPublisher;
+        this.transactionTemplate = transactionTemplate;
         this.jobProps = jobProps;
 
         log.info("작업 워커 준비: workerId={}, types={}", workerId, consumableTypes);
@@ -75,11 +85,19 @@ public class JobRunner {
 
     public List<Long> reapStale() {
         LocalDateTime now = now();
-        List<Long> reapedIds = jobQueueRepository.reapStale(
-                now.minus(jobProps.heartbeatTimeout()),
-                HEARTBEAT_TIMEOUT_ERROR,
-                now
-        );
+        List<ReapedJobDto> reaped = transactionTemplate.execute(status -> {
+            List<ReapedJobDto> rows = jobQueueRepository.reapStale(
+                    now.minus(jobProps.heartbeatTimeout()),
+                    HEARTBEAT_TIMEOUT_ERROR,
+                    now
+            );
+            rows.stream()
+                    .filter(ReapedJobDto::isTerminated)
+                    .forEach(row -> eventPublisher.publishEvent(JobTerminatedEvent.of(row.id(), row.type(), row.sprintId(), row.status(), null)));
+            return rows;
+        });
+
+        List<Long> reapedIds = reaped == null ? List.of() : reaped.stream().map(ReapedJobDto::id).toList();
         if (!reapedIds.isEmpty()) {
             log.warn("heartbeat가 끊긴 작업을 회수했습니다: {}", reapedIds);
         }
@@ -97,7 +115,7 @@ public class JobRunner {
                 log.warn("작업 완료를 기록하지 못했습니다(점유 상실). jobId={}", job.id());
             }
         } catch (JobCancelledException e) {
-            jobQueueRepository.markCancelled(job.id(), workerId, now());
+            cancel(job, e);
         } catch (NonRetryableJobException e) {
             log.warn("작업 실패(재시도 없음). jobId={}, reason={}", job.id(), e.getMessage());
             fail(job, false, e);
@@ -107,23 +125,40 @@ public class JobRunner {
         }
     }
 
+    private void cancel(
+            ClaimedJobDto job,
+            JobCancelledException cause
+    ) {
+        transactionTemplate.executeWithoutResult(status -> {
+            if (jobQueueRepository.markCancelled(job.id(), workerId, now())) {
+                eventPublisher.publishEvent(JobTerminatedEvent.of(job.id(), job.type(), job.sprintId(), JobStatus.CANCELLED, cause));
+            }
+        });
+    }
+
     private void fail(
             ClaimedJobDto job,
             boolean retryable,
             RuntimeException cause
     ) {
         LocalDateTime now = now();
-        Optional<JobStatus> result = jobQueueRepository.markFailed(
-                job.id(),
-                workerId,
-                retryable,
-                JobContext.truncate(cause.getClass().getSimpleName() + ": " + cause.getMessage()),
-                now.plus(backoff(job.attempt())),
-                now
-        );
-        if (result.isEmpty()) {
-            log.warn("작업 실패를 기록하지 못했습니다(점유 상실). jobId={}", job.id());
-        }
+        transactionTemplate.executeWithoutResult(status -> {
+            Optional<JobStatus> result = jobQueueRepository.markFailed(
+                    job.id(),
+                    workerId,
+                    retryable,
+                    JobContext.truncate(cause.getClass().getSimpleName() + ": " + cause.getMessage()),
+                    now.plus(backoff(job.attempt())),
+                    now
+            );
+            if (result.isEmpty()) {
+                log.warn("작업 실패를 기록하지 못했습니다(점유 상실). jobId={}", job.id());
+                return;
+            }
+            if (result.get() == JobStatus.FAILED) {
+                eventPublisher.publishEvent(JobTerminatedEvent.of(job.id(), job.type(), job.sprintId(), JobStatus.FAILED, cause));
+            }
+        });
     }
 
     Duration backoff(int attempt) {
