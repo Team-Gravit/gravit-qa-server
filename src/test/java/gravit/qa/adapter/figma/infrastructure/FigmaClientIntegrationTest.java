@@ -1,6 +1,7 @@
 package gravit.qa.adapter.figma.infrastructure;
 
 import gravit.qa.adapter.exception.NonRetryableExternalApiException;
+import gravit.qa.adapter.figma.dto.internal.FigmaFrameDto;
 import gravit.qa.adapter.figma.dto.internal.FigmaFrameImagesDto;
 import gravit.qa.adapter.figma.dto.internal.FigmaFrameWarningDto;
 import gravit.qa.adapter.figma.dto.internal.FigmaQaFramesDto;
@@ -19,7 +20,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 
-import static gravit.qa.adapter.figma.domain.FigmaFrameWarningType.INVALID_FRAME_NAME;
+import static gravit.qa.adapter.figma.domain.FigmaFrameWarningType.NESTED_SECTION;
 import static gravit.qa.adapter.figma.domain.FigmaFrameWarningType.QA_PAGE_NOT_FOUND;
 import static gravit.qa.adapter.figma.domain.FigmaFrameWarningType.UNCONFIRMED_FRAME;
 import static gravit.qa.adapter.figma.domain.FigmaPlatform.AOS;
@@ -45,25 +46,35 @@ class FigmaClientIntegrationTest {
               {"id": "1:1", "name": "QA", "type": "CANVAS"}
             ]}}
             """;
+    private static final String SPRINT_KEY = "3rd Agile";
     private static final String QA_PAGE_NODES = """
             {"nodes": {"1:1": {"document": {"id": "1:1", "name": "QA", "type": "CANVAS", "children": [
-              {"id": "3:0", "name": "2026-S21", "type": "SECTION", "children": [
+              {"id": "3:0", "name": "3rd Agile", "type": "SECTION", "children": [
                 {"id": "4:0", "name": "WEB", "type": "SECTION", "children": [
-                  {"id": "4:1", "name": "LEARNING", "type": "SECTION", "children": [{"id": "4:2", "name": "L.7.1", "type": "FRAME"}]}
+                  {"id": "4:1", "name": "LEARNING", "type": "SECTION", "children": [
+                    {"id": "4:2", "name": "LRN-02", "type": "FRAME", "absoluteBoundingBox": {"x": 0, "y": 0, "width": 1920, "height": 1080}}
+                  ]},
+                  {"id": "4:3", "name": "MY", "type": "SECTION", "children": [
+                    {"id": "4:4", "name": "묶음", "type": "SECTION"}
+                  ]}
                 ]},
                 {"id": "5:0", "name": "AOS", "type": "SECTION", "children": [
-                  {"id": "5:1", "name": "LEARNING", "type": "SECTION", "children": [{"id": "5:2", "name": "L.7.1", "type": "FRAME"}]},
-                  {"id": "5:3", "name": "LEAGUE", "type": "SECTION"}
+                  {"id": "5:1", "name": "LEARNING", "type": "SECTION", "children": [
+                    {"id": "5:2", "name": "LRN-02", "type": "FRAME", "absoluteBoundingBox": {"x": 0, "y": 0, "width": 360, "height": 740}}
+                  ]},
+                  {"id": "5:3", "name": "OTHER", "type": "SECTION"}
                 ]}
+              ]},
+              {"id": "7:0", "name": "SCREEN", "type": "SECTION", "children": [
+                {"id": "7:1", "name": "LG-01", "type": "SECTION"}
               ]}
             ]}}}}
             """;
-    private static final String LEAGUE_SECTION_NODES = """
-            {"nodes": {"5:3": {"document": {"id": "5:3", "name": "LEAGUE", "type": "SECTION", "children": [
-              {"id": "5:4", "name": "LG.2", "type": "FRAME"},
-              {"id": "5:5", "name": "LG.2", "type": "FRAME"},
-              {"id": "5:6", "name": "미확인/LEAGUE-1", "type": "FRAME"},
-              {"id": "5:7", "name": "Frame 12", "type": "FRAME"}
+    private static final String OTHER_SECTION_NODES = """
+            {"nodes": {"5:3": {"document": {"id": "5:3", "name": "OTHER", "type": "SECTION", "children": [
+              {"id": "5:4", "name": "SETTING-01", "type": "FRAME", "absoluteBoundingBox": {"x": 0, "y": 0, "width": 360, "height": 740}},
+              {"id": "5:5", "name": "SETTING-01", "type": "FRAME", "absoluteBoundingBox": {"x": 400, "y": 0, "width": 360, "height": 740}},
+              {"id": "5:6", "name": "미확인/OTHER-1", "type": "FRAME", "absoluteBoundingBox": {"x": 800, "y": 0, "width": 360, "height": 740}}
             ]}}}}
             """;
 
@@ -84,21 +95,23 @@ class FigmaClientIntegrationTest {
         void QA_페이지를_찾아_스프린트_프레임을_해석하고_토큰_헤더를_보낸다() {
             // given
             externalApiStubServer.stub("GET", FILE_PATH, json(200, FILE_BODY));
-            externalApiStubServer.stub("GET", NODES_PATH, json(200, QA_PAGE_NODES), json(200, LEAGUE_SECTION_NODES));
+            externalApiStubServer.stub("GET", NODES_PATH, json(200, QA_PAGE_NODES), json(200, OTHER_SECTION_NODES));
 
             // when
-            FigmaQaFramesDto result = figmaClient.getQaFrames(FILE_KEY, "2026-S21");
+            FigmaQaFramesDto result = figmaClient.getQaFrames(FILE_KEY, SPRINT_KEY);
 
             // then
             List<RecordedRequest> nodeRequests = externalApiStubServer.requests("GET", NODES_PATH);
             assertSoftly(softly -> {
                 softly.assertThat(result.screens())
                         .extracting(FigmaScreenDto::platform, FigmaScreenDto::screenId)
-                        .containsExactly(tuple(WEB, "L.7.1"), tuple(AOS, "L.7.1"), tuple(AOS, "LG.2"));
-                softly.assertThat(result.findScreen(AOS, "LG.2").orElseThrow().hasStateVariants()).isTrue();
+                        .containsExactly(tuple(WEB, "LRN-02"), tuple(AOS, "LRN-02"), tuple(AOS, "SETTING-01"));
+                softly.assertThat(result.findScreen(AOS, "SETTING-01").orElseThrow().frames())
+                        .extracting(FigmaFrameDto::nodeId, FigmaFrameDto::state, FigmaFrameDto::sectionName, FigmaFrameDto::width)
+                        .containsExactly(tuple("5:4", null, "OTHER", 360.0), tuple("5:5", null, "OTHER", 360.0));
                 softly.assertThat(result.warnings())
                         .extracting(FigmaFrameWarningDto::type, FigmaFrameWarningDto::name)
-                        .containsExactly(tuple(UNCONFIRMED_FRAME, "미확인/LEAGUE-1"), tuple(INVALID_FRAME_NAME, "Frame 12"));
+                        .containsExactly(tuple(NESTED_SECTION, "묶음"), tuple(UNCONFIRMED_FRAME, "미확인/OTHER-1"));
                 softly.assertThat(decodedQuery(externalApiStubServer.requests("GET", FILE_PATH).getFirst())).isEqualTo("depth=1");
                 softly.assertThat(nodeRequests).extracting(FigmaClientIntegrationTest::decodedQuery)
                         .containsExactly("ids=1:1&depth=4", "ids=5:3&depth=2");
@@ -113,7 +126,7 @@ class FigmaClientIntegrationTest {
             externalApiStubServer.stub("GET", FILE_PATH, json(200, FILE_BODY.replace("\"QA\"", "\"Archive\"")));
 
             // when
-            FigmaQaFramesDto result = figmaClient.getQaFrames(FILE_KEY, "2026-S21");
+            FigmaQaFramesDto result = figmaClient.getQaFrames(FILE_KEY, SPRINT_KEY);
 
             // then
             assertThat(result.warnings()).extracting(FigmaFrameWarningDto::type).containsExactly(QA_PAGE_NOT_FOUND);
@@ -123,7 +136,7 @@ class FigmaClientIntegrationTest {
         @Test
         void 파일_키_형식이_아니면_호출하지_않고_재시도하지_않는_실패() {
             // when & then
-            assertThatThrownBy(() -> figmaClient.getQaFrames("../etc", "2026-S21"))
+            assertThatThrownBy(() -> figmaClient.getQaFrames("../etc", SPRINT_KEY))
                     .isInstanceOf(NonRetryableExternalApiException.class);
             assertThat(externalApiStubServer.requests()).isEmpty();
         }
@@ -167,7 +180,7 @@ class FigmaClientIntegrationTest {
             externalApiStubServer.stub("GET", FILE_PATH, status(429).withHeader("Retry-After", "3"), json(200, FILE_BODY.replace("\"QA\"", "\"Archive\"")));
 
             // when
-            figmaClient.getQaFrames(FILE_KEY, "2026-S21");
+            figmaClient.getQaFrames(FILE_KEY, SPRINT_KEY);
 
             // then
             assertThat(recordingSleeper.sleeps()).containsExactly(Duration.ofSeconds(3));
@@ -179,7 +192,7 @@ class FigmaClientIntegrationTest {
             externalApiStubServer.stub("GET", FILE_PATH, status(403));
 
             // when & then
-            assertThatThrownBy(() -> figmaClient.getQaFrames(FILE_KEY, "2026-S21"))
+            assertThatThrownBy(() -> figmaClient.getQaFrames(FILE_KEY, SPRINT_KEY))
                     .isInstanceOf(NonRetryableExternalApiException.class)
                     .hasMessageNotContaining("test-figma-token");
             assertThat(externalApiStubServer.requests()).hasSize(1);

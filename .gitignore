@@ -11,3 +11,5 @@ out/
 .env
 *.log
 evidence/
+
+/docs/
