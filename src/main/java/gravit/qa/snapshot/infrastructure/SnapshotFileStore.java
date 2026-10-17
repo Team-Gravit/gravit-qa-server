@@ -34,21 +34,23 @@ public class SnapshotFileStore {
 
     public StoredSnapshotDto save(
             long sprintId,
+            long jobId,
             SnapshotSource source,
             String fileName,
             String content
     ) {
-        return save(sprintId, source, fileName, content.getBytes(StandardCharsets.UTF_8));
+        return save(sprintId, jobId, source, fileName, content.getBytes(StandardCharsets.UTF_8));
     }
 
     public StoredSnapshotDto save(
             long sprintId,
+            long jobId,
             SnapshotSource source,
             String fileName,
             byte[] content
     ) {
-        validate(sprintId, fileName);
-        String storagePath = String.join(PATH_SEPARATOR, SNAPSHOT_DIRECTORY, String.valueOf(sprintId), source.name(), fileName);
+        validate(sprintId, jobId, fileName);
+        String storagePath = String.join(PATH_SEPARATOR, SNAPSHOT_DIRECTORY, String.valueOf(sprintId), String.valueOf(jobId), source.name(), fileName);
         Path root = Path.of(storageProps.root()).toAbsolutePath().normalize();
         Path target = root.resolve(storagePath).normalize();
         if (!target.startsWith(root)) {
@@ -77,10 +79,14 @@ public class SnapshotFileStore {
 
     private void validate(
             long sprintId,
+            long jobId,
             String fileName
     ) {
         if (sprintId <= 0) {
             throw new IllegalArgumentException("스프린트 ID가 올바르지 않습니다: " + sprintId);
+        }
+        if (jobId <= 0) {
+            throw new IllegalArgumentException("작업 ID가 올바르지 않습니다: " + jobId);
         }
         if (fileName == null || !FILE_NAME.matcher(fileName).matches()) {
             throw new IllegalArgumentException("스냅샷 파일 이름이 올바르지 않습니다: " + fileName);

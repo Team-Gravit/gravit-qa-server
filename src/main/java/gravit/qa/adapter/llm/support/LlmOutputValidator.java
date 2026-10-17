@@ -3,6 +3,8 @@ package gravit.qa.adapter.llm.support;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.networknt.schema.JsonSchemaFactory;
 import com.networknt.schema.SchemaValidatorsConfig;
 import com.networknt.schema.SpecVersion;
@@ -10,9 +12,14 @@ import com.networknt.schema.ValidationMessage;
 import gravit.qa.adapter.llm.dto.internal.LlmValidationResultDto;
 import lombok.RequiredArgsConstructor;
 import org.springframework.ai.converter.BeanOutputConverter;
+import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Component;
 
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.RecordComponent;
+import java.lang.reflect.Type;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -28,6 +35,13 @@ public class LlmOutputValidator {
     private static final SchemaValidatorsConfig SCHEMA_CONFIG = SchemaValidatorsConfig.builder().locale(Locale.KOREAN).build();
     private static final String CODE_FENCE = "```";
     private static final String LINE_BREAK = "\n";
+    private static final String TYPE_FIELD = "type";
+    private static final String ENUM_FIELD = "enum";
+    private static final String PROPERTIES_FIELD = "properties";
+    private static final String ITEMS_FIELD = "items";
+    private static final String REF_FIELD = "$ref";
+    private static final String LOCAL_REF_PREFIX = "#";
+    private static final String NULL_TYPE = "null";
 
     private final Map<Class<?>, LlmOutputSchema<?>> typeToSchema = new ConcurrentHashMap<>();
 
@@ -75,11 +89,96 @@ public class LlmOutputValidator {
 
     private LlmOutputSchema<?> createSchema(Class<?> outputType) {
         BeanOutputConverter<?> converter = new BeanOutputConverter<>(outputType, objectMapper);
+        String generatedSchema = converter.getJsonSchema();
+        String jsonSchema = allowNullComponents(outputType, generatedSchema);
         return new LlmOutputSchema<>(
                 outputType,
-                converter.getFormat(),
-                SCHEMA_FACTORY.getSchema(converter.getJsonSchema(), SCHEMA_CONFIG)
+                converter.getFormat().replace(generatedSchema, jsonSchema),
+                SCHEMA_FACTORY.getSchema(jsonSchema, SCHEMA_CONFIG)
         );
+    }
+
+    private String allowNullComponents(
+            Class<?> outputType,
+            String jsonSchema
+    ) {
+        try {
+            ObjectNode root = (ObjectNode) objectMapper.readTree(jsonSchema);
+            markNullable(outputType, root, root);
+            return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(root);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException(outputType.getSimpleName() + " 출력 스키마를 해석할 수 없습니다.", e);
+        }
+    }
+
+    private void markNullable(
+            Class<?> type,
+            JsonNode schema,
+            ObjectNode root
+    ) {
+        if (!type.isRecord()) {
+            return;
+        }
+        JsonNode properties = resolve(schema, root).path(PROPERTIES_FIELD);
+        for (RecordComponent component : type.getRecordComponents()) {
+            JsonNode property = properties.get(component.getName());
+            if (property == null) {
+                continue;
+            }
+            if (component.getAccessor().isAnnotationPresent(Nullable.class)) {
+                allowNull(component, resolve(property, root));
+            }
+
+            Class<?> componentType = component.getType();
+            if (componentType.isRecord()) {
+                markNullable(componentType, property, root);
+            } else if (Collection.class.isAssignableFrom(componentType)) {
+                Class<?> elementType = elementTypeOf(component.getGenericType());
+                if (elementType != null) {
+                    markNullable(elementType, property.path(ITEMS_FIELD), root);
+                }
+            }
+        }
+    }
+
+    private JsonNode resolve(
+            JsonNode schema,
+            ObjectNode root
+    ) {
+        JsonNode ref = schema.get(REF_FIELD);
+        if (ref != null && ref.isTextual() && ref.asText().startsWith(LOCAL_REF_PREFIX)) {
+            return root.at(ref.asText().substring(LOCAL_REF_PREFIX.length()));
+        }
+        return schema;
+    }
+
+    private void allowNull(
+            RecordComponent component,
+            JsonNode property
+    ) {
+        JsonNode type = property.get(TYPE_FIELD);
+        if (type != null && type.isArray()) {
+            return;
+        }
+        if (!(property instanceof ObjectNode node) || type == null || !type.isTextual()) {
+            throw new IllegalStateException(component.getDeclaringRecord().getSimpleName() + "." + component.getName()
+                    + "의 스키마에는 null을 허용할 type이 없어 @Nullable을 쓸 수 없습니다.");
+        }
+
+        ArrayNode types = objectMapper.createArrayNode().add(type.asText()).add(NULL_TYPE);
+        node.set(TYPE_FIELD, types);
+        if (node.get(ENUM_FIELD) instanceof ArrayNode values) {
+            values.addNull();
+        }
+    }
+
+    private Class<?> elementTypeOf(Type genericType) {
+        if (genericType instanceof ParameterizedType parameterized
+                && parameterized.getActualTypeArguments().length == 1
+                && parameterized.getActualTypeArguments()[0] instanceof Class<?> elementType) {
+            return elementType;
+        }
+        return null;
     }
 
     private String stripCodeFence(String output) {
