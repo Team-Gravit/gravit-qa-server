@@ -6,6 +6,7 @@ import gravit.qa.global.exception.domain.RestApiException;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataAccessException;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
@@ -21,6 +22,7 @@ import static gravit.qa.global.exception.domain.CustomErrorCode.DATABASE_EXCEPTI
 import static gravit.qa.global.exception.domain.CustomErrorCode.INTERNAL_SERVER_ERROR;
 import static gravit.qa.global.exception.domain.CustomErrorCode.INVALID_PARAMS;
 import static gravit.qa.global.exception.domain.CustomErrorCode.RESOURCE_NOT_FOUND;
+import static gravit.qa.global.exception.domain.CustomErrorCode.VERSION_CONFLICT;
 
 @Slf4j
 @RestControllerAdvice
@@ -57,6 +59,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(NoResourceFoundException.class)
     public ResponseEntity<ErrorResponse<String>> handleNoResource(NoResourceFoundException e) {
         return toResponse(RESOURCE_NOT_FOUND);
+    }
+
+    @ExceptionHandler(OptimisticLockingFailureException.class)
+    public ResponseEntity<ErrorResponse<String>> handleOptimisticLock(OptimisticLockingFailureException e) {
+        return toResponse(VERSION_CONFLICT);
     }
 
     @ExceptionHandler(DataAccessException.class)
