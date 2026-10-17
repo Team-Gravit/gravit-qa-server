@@ -6,6 +6,7 @@ import gravit.qa.job.domain.JobType;
 import gravit.qa.job.dto.internal.ClaimedJobDto;
 import gravit.qa.job.dto.internal.JobDto;
 import gravit.qa.job.dto.internal.JobStepDto;
+import gravit.qa.job.dto.internal.ReapedJobDto;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -16,8 +17,10 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.IntStream;
 
 import static gravit.qa.job.repository.sql.JobQueueSql.CLAIM_NEXT;
@@ -34,6 +37,8 @@ import static gravit.qa.job.repository.sql.JobQueueSql.REQUEST_CANCEL;
 import static gravit.qa.job.repository.sql.JobQueueSql.RESET_STEPS;
 import static gravit.qa.job.repository.sql.JobQueueSql.SELECT_CANCEL_REQUESTED;
 import static gravit.qa.job.repository.sql.JobQueueSql.SELECT_JOB;
+import static gravit.qa.job.repository.sql.JobQueueSql.SELECT_LATEST_JOB_ID;
+import static gravit.qa.job.repository.sql.JobQueueSql.SELECT_SPRINT_IDS_WITH_ACTIVE_JOB;
 import static gravit.qa.job.repository.sql.JobQueueSql.SELECT_STEPS;
 import static gravit.qa.job.repository.sql.JobQueueSql.START_STEP;
 
@@ -62,6 +67,13 @@ public class JobQueueRepositoryImpl implements JobQueueRepository {
             rs.getString("message"),
             rs.getObject("started_at", LocalDateTime.class),
             rs.getObject("finished_at", LocalDateTime.class)
+    );
+
+    private static final RowMapper<ReapedJobDto> REAPED_ROW_MAPPER = (rs, rowNum) -> new ReapedJobDto(
+            rs.getLong("id"),
+            JobType.valueOf(rs.getString("type")),
+            nullableLong(rs, "sprint_id"),
+            JobStatus.valueOf(rs.getString("status"))
     );
 
     private static final RowMapper<ClaimedJobDto> CLAIMED_ROW_MAPPER = (rs, rowNum) -> new ClaimedJobDto(
@@ -242,7 +254,7 @@ public class JobQueueRepositoryImpl implements JobQueueRepository {
     }
 
     @Override
-    public List<Long> reapStale(
+    public List<ReapedJobDto> reapStale(
             LocalDateTime staleBefore,
             String error,
             LocalDateTime now
@@ -252,15 +264,42 @@ public class JobQueueRepositoryImpl implements JobQueueRepository {
                 .addValue("error", error)
                 .addValue("now", now);
 
-        List<Long> reapedIds = jdbcTemplate.query(REAP_STALE, params, (rs, rowNum) -> rs.getLong("id"));
-        if (!reapedIds.isEmpty()) {
+        List<ReapedJobDto> reaped = jdbcTemplate.query(REAP_STALE, params, REAPED_ROW_MAPPER);
+        if (!reaped.isEmpty()) {
             MapSqlParameterSource stepParams = new MapSqlParameterSource()
-                    .addValue("jobIds", reapedIds)
+                    .addValue("jobIds", reaped.stream().map(ReapedJobDto::id).toList())
                     .addValue("message", error)
                     .addValue("now", now);
             jdbcTemplate.update(FAIL_RUNNING_STEPS, stepParams);
         }
-        return reapedIds;
+        return reaped;
+    }
+
+    @Override
+    public Optional<Long> findLatestJobId(
+            long sprintId,
+            JobType type
+    ) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("sprintId", sprintId)
+                .addValue("type", type.name());
+
+        return Optional.ofNullable(jdbcTemplate.queryForObject(SELECT_LATEST_JOB_ID, params, Long.class));
+    }
+
+    @Override
+    public Set<Long> findSprintIdsWithActiveJob(
+            Collection<Long> sprintIds,
+            JobType type
+    ) {
+        if (sprintIds.isEmpty()) {
+            return Set.of();
+        }
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("sprintIds", sprintIds)
+                .addValue("type", type.name());
+
+        return new HashSet<>(jdbcTemplate.queryForList(SELECT_SPRINT_IDS_WITH_ACTIVE_JOB, params, Long.class));
     }
 
     private MapSqlParameterSource jobIdParam(long jobId) {
