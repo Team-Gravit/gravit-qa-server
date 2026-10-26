@@ -97,10 +97,11 @@ jobs:
             fi
 
             # deploy.resources.limits는 Compose v2에서만 적용된다.
+            # 서버 로그인 셸(zsh)은 따옴표 없는 변수를 단어 분리하지 않아, 명령을 변수 대신 함수로 고른다.
             if docker compose version >/dev/null 2>&1; then
-              COMPOSE="docker compose"
+              compose() { docker compose "$@"; }
             elif docker-compose version --short 2>/dev/null | grep -q '^2'; then
-              COMPOSE="docker-compose"
+              compose() { docker-compose "$@"; }
             else
               echo "Compose v2가 필요합니다."
               exit 1
@@ -110,8 +111,8 @@ jobs:
             docker network inspect llm-net >/dev/null 2>&1 || docker network create llm-net
 
             # qa-e2e는 C7 전까지 올리지 않는다.
-            $COMPOSE -f docker-compose-qa.yml pull qa-api
-            $COMPOSE -f docker-compose-qa.yml up -d --no-deps --force-recreate qa-api
+            compose -f docker-compose-qa.yml pull qa-api
+            compose -f docker-compose-qa.yml up -d --no-deps --force-recreate qa-api
 
             # 저장소가 public이라 Actions 로그에 컨테이너 로그를 남기지 않는다. 원인은 서버에서 docker logs로 본다.
             i=0
