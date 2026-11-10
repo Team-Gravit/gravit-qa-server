@@ -14,6 +14,7 @@ import gravit.qa.sprint.domain.WarningCode;
 import gravit.qa.sprint.dto.internal.WarningDto;
 import gravit.qa.sprint.fixture.SprintFixture;
 import gravit.qa.sprint.repository.SprintRepository;
+import gravit.qa.sprint.service.SprintCommandService;
 import gravit.qa.support.HttpStubServer;
 import gravit.qa.support.HttpStubServer.RecordedRequest;
 import gravit.qa.support.HttpStubServer.StubResponse;
@@ -61,6 +62,9 @@ class SprintControllerIntegrationTest {
 
     @Autowired
     private SprintFixture sprintFixture;
+
+    @Autowired
+    private SprintCommandService sprintCommandService;
 
     @Autowired
     private SprintRepository sprintRepository;
@@ -192,6 +196,24 @@ class SprintControllerIntegrationTest {
         }
 
         @Test
+        void 상세는_스프린트_경고를_코드와_메시지로_함께_내려준다() throws Exception {
+            // given
+            Sprint sprint = sprintFixture.스프린트(SprintStatus.REVIEW);
+            Sprint other = sprintFixture.스프린트("2nd Agile", "44444444444444444444444444444444", SprintStatus.REVIEW);
+            sprintCommandService.addWarning(sprint.getId(), WarningDto.of(WarningCode.SPEC_READ_FAILED, "LRN-02: 본문 첫 블록이 기본 정보 표가 아닙니다"));
+
+            // when & then
+            mockMvc.perform(get(SPRINTS_PATH + "/" + sprint.getId()).header("Authorization", BEARER))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.warnings", hasSize(1)))
+                    .andExpect(jsonPath("$.warnings[0].code").value("SPEC_READ_FAILED"))
+                    .andExpect(jsonPath("$.warnings[0].message").value("LRN-02: 본문 첫 블록이 기본 정보 표가 아닙니다"));
+
+            mockMvc.perform(get(SPRINTS_PATH + "/" + other.getId()).header("Authorization", BEARER))
+                    .andExpect(jsonPath("$.warnings", hasSize(0)));
+        }
+
+        @Test
         void 없는_스프린트는_404_SPRINT_4041() throws Exception {
             // when & then
             mockMvc.perform(get(SPRINTS_PATH + "/999").header("Authorization", BEARER))
@@ -301,7 +323,10 @@ class SprintControllerIntegrationTest {
             // when & then
             종료(sprint.getId(), sprint.getVersion())
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.status").value("CLOSED"));
+                    .andExpect(jsonPath("$.status").value("CLOSED"))
+                    .andExpect(jsonPath("$.warnings", hasSize(1)))
+                    .andExpect(jsonPath("$.warnings[0].code").value("NOTION_WRITE_FAILED"))
+                    .andExpect(jsonPath("$.warnings[0].message").isNotEmpty());
 
             assertThat(sprintRepository.findById(sprint.getId()).orElseThrow().getWarnings())
                     .extracting(WarningDto::code)

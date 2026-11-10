@@ -7,6 +7,7 @@ import gravit.qa.adapter.figma.dto.internal.FigmaScreenDto;
 import gravit.qa.adapter.github.dto.internal.GithubChangedFileDto;
 import gravit.qa.adapter.llm.support.LlmPromptTemplates;
 import gravit.qa.adapter.notion.dto.internal.NotionSpecDto;
+import gravit.qa.adapter.notion.dto.internal.NotionSpecTableDto;
 import gravit.qa.adapter.notion.dto.internal.NotionSprintDto;
 import gravit.qa.checklist.fixture.TestCatalogFixture;
 import gravit.qa.feature.domain.Part;
@@ -59,8 +60,10 @@ class SetupPromptBuilderTest {
                 softly.assertThat(prompt.prompt().system()).contains("- learner: ", "- admin: ", "- LRN-02.empty-state: 유닛 상세 빈 상태");
                 softly.assertThat(prompt.prompt().user()).contains(
                         "화면 ID: LRN-02",
+                        "라우트: /learning/units/$unitId",
                         "파트: SERVER, WEB",
                         "명세 상태: CONFIRMED (확정)",
+                        "관련 API: GET /api/v1/units/{unitId}, GET /api/v1/units/{unitId}/lessons",
                         "진입하면 유닛 목록을 보여준다",
                         "- WEB: 프레임 2개, 상태 [EMPTY]",
                         "유닛 상세 개편",
@@ -84,6 +87,21 @@ class SetupPromptBuilderTest {
         }
 
         @Test
+        void 라우트와_관련_API가_비어_있으면_없음으로_적는다() {
+            // given
+            NotionSpecTableDto table = NotionSpecTableDto.of("확정", List.of("웹", "앱"), null, List.of(), null, List.of());
+
+            // when
+            SetupPromptDto prompt = builder.build(SPRINT, 명세(table, "본문"), List.of(), null, SetupDiffDto.empty());
+
+            // then
+            assertSoftly(softly -> {
+                softly.assertThat(prompt.prompt().user()).contains("- 라우트: (없음)");
+                softly.assertThat(prompt.prompt().user()).contains("- 관련 API: (없음)");
+            });
+        }
+
+        @Test
         void 상한을_넘으면_뒤에서_자르고_잘림을_표시한다() {
             // when
             SetupPromptDto prompt = builder.build(SPRINT, 명세("가".repeat(MAX_PROMPT_CHARS)), SCREENS, null, DIFF);
@@ -100,7 +118,22 @@ class SetupPromptBuilderTest {
     }
 
     private static SetupFeatureSpecDto 명세(String markdown) {
-        NotionSpecDto spec = new NotionSpecDto("p", "LRN-02", "유닛 상세", List.of("서버", "웹"), "/units", "getUnit", null, "확정", null, "{}");
-        return SetupFeatureSpecDto.of(spec, List.of(Part.SERVER, Part.WEB), SpecStatus.CONFIRMED, markdown);
+        NotionSpecTableDto table = NotionSpecTableDto.of(
+                "확정",
+                List.of("서버", "웹"),
+                "/learning/units/$unitId",
+                List.of("GET /api/v1/units/{unitId}", "GET /api/v1/units/{unitId}/lessons"),
+                null,
+                List.of()
+        );
+        return 명세(table, markdown);
+    }
+
+    private static SetupFeatureSpecDto 명세(
+            NotionSpecTableDto table,
+            String markdown
+    ) {
+        NotionSpecDto spec = new NotionSpecDto("p", "LRN-02", "유닛 상세", null, "{}");
+        return SetupFeatureSpecDto.of(spec, table, List.of(Part.SERVER, Part.WEB), SpecStatus.CONFIRMED, markdown);
     }
 }

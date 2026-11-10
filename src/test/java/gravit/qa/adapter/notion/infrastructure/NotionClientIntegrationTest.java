@@ -5,7 +5,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import gravit.qa.adapter.exception.NonRetryableExternalApiException;
 import gravit.qa.adapter.notion.dto.internal.NotionPageBodyDto;
 import gravit.qa.adapter.notion.dto.internal.NotionSpecDto;
+import gravit.qa.adapter.notion.dto.internal.NotionSpecTableDto;
 import gravit.qa.adapter.notion.dto.internal.NotionSprintDto;
+import gravit.qa.adapter.notion.support.NotionSpecTableParser;
 import gravit.qa.support.HttpStubServer;
 import gravit.qa.support.HttpStubServer.RecordedRequest;
 import gravit.qa.support.QaSpringBootTest;
@@ -19,6 +21,10 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.util.List;
 
+import static gravit.qa.adapter.notion.fixture.NotionSpecPageFixture.QUIZ_02_PAGE_ID;
+import static gravit.qa.adapter.notion.fixture.NotionSpecPageFixture.QUIZ_02_TABLE_ID;
+import static gravit.qa.adapter.notion.fixture.NotionSpecPageFixture.QUIZ_02_기본_정보_표;
+import static gravit.qa.adapter.notion.fixture.NotionSpecPageFixture.QUIZ_02_본문;
 import static gravit.qa.support.HttpStubServer.StubResponse.json;
 import static gravit.qa.support.HttpStubServer.StubResponse.status;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -110,7 +116,7 @@ class NotionClientIntegrationTest {
     class 기능_명세_조회 {
 
         @Test
-        void 대상_기능의_명세_속성을_읽는다() {
+        void 대상_기능의_화면_ID와_화면_이름과_최종_검증일을_읽는다() {
             // given
             externalApiStubServer.stub("GET", "/v1/pages/" + SPEC_ID, json(200, specPage()));
             NotionSprintDto sprint = new NotionSprintDto(SPRINT_ID, "2026-S21", null, null, List.of(SPEC_ID), null, null, null, "{}");
@@ -121,13 +127,29 @@ class NotionClientIntegrationTest {
             // then
             NotionSpecDto spec = specs.getFirst();
             assertSoftly(softly -> {
-                softly.assertThat(spec.screenId()).isEqualTo("L.7.1");
-                softly.assertThat(spec.name()).isEqualTo("유닛 상세");
-                softly.assertThat(spec.parts()).containsExactly("서버", "웹");
-                softly.assertThat(spec.route()).isEqualTo("/learning/units/$unitId");
-                softly.assertThat(spec.relatedOperationIds()).containsExactly("getUnit", "getLessons");
-                softly.assertThat(spec.specStatus()).isEqualTo("확정");
+                softly.assertThat(spec.screenId()).isEqualTo("QUIZ-02");
+                softly.assertThat(spec.name()).isEqualTo("문제 풀이");
                 softly.assertThat(spec.lastVerifiedAt()).isEqualTo(LocalDate.of(2026, 10, 2));
+            });
+        }
+
+        @Test
+        void 본문_첫_표의_행까지_받아와_기본_정보_표를_읽을_수_있다() {
+            // given
+            externalApiStubServer.stub("GET", "/v1/blocks/" + QUIZ_02_PAGE_ID + "/children", json(200, QUIZ_02_본문()));
+            externalApiStubServer.stub("GET", "/v1/blocks/" + QUIZ_02_TABLE_ID + "/children", json(200, QUIZ_02_기본_정보_표()));
+
+            // when
+            NotionPageBodyDto body = notionClient.getPageBody(QUIZ_02_PAGE_ID);
+            NotionSpecTableDto table = NotionSpecTableParser.parse(body.blocks());
+
+            // then
+            assertSoftly(softly -> {
+                softly.assertThat(body.blocks().getFirst().children()).hasSize(7);
+                softly.assertThat(table.specStatus()).isEqualTo("확정");
+                softly.assertThat(table.parts()).containsExactly("서버", "웹", "앱");
+                softly.assertThat(table.relatedApis()).containsExactly("GET /api/v1/problems/{lessonId}", "POST /api/v1/problems/results");
+                softly.assertThat(body.markdown()).contains("### 화면에 보이는 것", "상태: 객관식 주관식");
             });
         }
 
@@ -264,14 +286,10 @@ class NotionClientIntegrationTest {
                 {"object": "page", "id": "22222222-2222-2222-2222-222222222222",
                  "parent": {"type": "database_id", "database_id": "%s"},
                  "properties": {
-                   "화면 ID": {"id": "title", "type": "title", "title": [{"plain_text": "L.7.1"}]},
-                   "이름": {"id": "n", "type": "rich_text", "rich_text": [{"plain_text": "유닛 상세"}]},
-                   "파트": {"id": "p", "type": "multi_select", "multi_select": [{"name": "서버"}, {"name": "웹"}]},
-                   "라우트": {"id": "r", "type": "rich_text", "rich_text": [{"plain_text": "/learning/units/$unitId"}]},
-                   "관련 API": {"id": "a", "type": "rich_text", "rich_text": [{"plain_text": "getUnit, getLessons\\ngetUnit"}]},
-                   "Figma": {"id": "f", "type": "url", "url": null},
-                   "명세 상태": {"id": "s", "type": "select", "select": {"name": "확정"}},
-                   "최종 검증일": {"id": "d", "type": "date", "date": {"start": "2026-10-02", "end": null}}
+                   "화면 ID": {"id": "title", "type": "title", "title": [{"plain_text": "QUIZ-02"}]},
+                   "화면 이름": {"id": "n", "type": "rich_text", "rich_text": [{"plain_text": "문제 풀이"}]},
+                   "최종 검증일": {"id": "d", "type": "date", "date": {"start": "2026-10-02", "end": null}},
+                   "스프린트": {"id": "PlQ-ZA", "type": "relation", "relation": [{"id": "11111111-1111-1111-1111-111111111111"}], "has_more": false}
                  }}
                 """.formatted(SPEC_DB);
     }
