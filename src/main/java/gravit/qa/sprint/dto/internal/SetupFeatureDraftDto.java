@@ -30,11 +30,11 @@ public record SetupFeatureDraftDto(
         return FeatureUpsertDto.of(
                 spec.screenId(),
                 name == null || name.isBlank() ? spec.screenId() : name.trim(),
-                spec.spec().route(),
+                spec.table().route(),
                 spec.parts(),
                 spec.spec().pageId(),
                 spec.specStatus(),
-                spec.spec().relatedOperationIds()
+                spec.table().relatedApis()
         );
     }
 }

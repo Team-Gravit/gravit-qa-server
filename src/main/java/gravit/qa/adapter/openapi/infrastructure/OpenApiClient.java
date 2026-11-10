@@ -62,8 +62,8 @@ public class OpenApiClient {
 
     public OpenApiExcerptDto extract(
             OpenApiDocumentDto apiDocs,
-            Collection<String> operationIds
+            Collection<String> apis
     ) {
-        return OpenApiExtractor.extract(apiDocs.document(), operationIds);
+        return OpenApiExtractor.extract(apiDocs.document(), apis);
     }
 }

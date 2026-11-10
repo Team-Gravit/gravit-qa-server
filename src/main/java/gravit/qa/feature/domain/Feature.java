@@ -50,8 +50,8 @@ public class Feature extends BaseEntity {
     private SpecStatus specStatus;
 
     @JdbcTypeCode(SqlTypes.ARRAY)
-    @Column(name = "related_operation_ids", nullable = false)
-    private List<String> relatedOperationIds;
+    @Column(name = "related_apis", nullable = false)
+    private List<String> relatedApis;
 
     @Builder(access = AccessLevel.PRIVATE)
     private Feature(
@@ -61,7 +61,7 @@ public class Feature extends BaseEntity {
             List<String> parts,
             String notionPageId,
             SpecStatus specStatus,
-            List<String> relatedOperationIds
+            List<String> relatedApis
     ) {
         this.screenId = screenId;
         this.name = name;
@@ -69,7 +69,7 @@ public class Feature extends BaseEntity {
         this.parts = parts;
         this.notionPageId = notionPageId;
         this.specStatus = specStatus;
-        this.relatedOperationIds = relatedOperationIds;
+        this.relatedApis = relatedApis;
     }
 
     public static Feature create(FeatureUpsertDto feature) {
@@ -80,7 +80,7 @@ public class Feature extends BaseEntity {
                 .parts(Part.toNames(feature.parts()))
                 .notionPageId(feature.notionPageId())
                 .specStatus(feature.specStatus())
-                .relatedOperationIds(List.copyOf(feature.relatedOperationIds()))
+                .relatedApis(List.copyOf(feature.relatedApis()))
                 .build();
     }
 
@@ -95,6 +95,6 @@ public class Feature extends BaseEntity {
         this.parts = Part.toNames(feature.parts());
         this.notionPageId = feature.notionPageId();
         this.specStatus = feature.specStatus();
-        this.relatedOperationIds = List.copyOf(feature.relatedOperationIds());
+        this.relatedApis = List.copyOf(feature.relatedApis());
     }
 }

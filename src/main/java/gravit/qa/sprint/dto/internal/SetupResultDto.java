@@ -8,6 +8,7 @@ public record SetupResultDto(
         LocalDate periodStart,
         LocalDate periodEnd,
         String figmaFileKey,
+        List<WarningDto> sprintWarnings,
         List<SetupFeatureDraftDto> features,
         List<SetupSnapshotDto> snapshots
 ) {
@@ -17,9 +18,10 @@ public record SetupResultDto(
             LocalDate periodStart,
             LocalDate periodEnd,
             String figmaFileKey,
+            List<WarningDto> sprintWarnings,
             List<SetupFeatureDraftDto> features,
             List<SetupSnapshotDto> snapshots
     ) {
-        return new SetupResultDto(baseline, periodStart, periodEnd, figmaFileKey, List.copyOf(features), List.copyOf(snapshots));
+        return new SetupResultDto(baseline, periodStart, periodEnd, figmaFileKey, List.copyOf(sprintWarnings), List.copyOf(features), List.copyOf(snapshots));
     }
 }

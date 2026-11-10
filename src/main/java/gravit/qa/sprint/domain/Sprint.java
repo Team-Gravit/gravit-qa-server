@@ -40,6 +40,7 @@ public class Sprint extends BaseEntity {
             SprintStatus.PREPARE_FAILED,
             SprintStatus.REVIEW
     );
+    private static final Set<WarningCode> SETUP_WARNING_CODES = EnumSet.of(WarningCode.SPEC_READ_FAILED);
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -150,6 +151,7 @@ public class Sprint extends BaseEntity {
             LocalDate periodStart,
             LocalDate periodEnd,
             String figmaFileKey,
+            List<WarningDto> setupWarnings,
             LocalDateTime now
     ) {
         if (status != SprintStatus.PREPARING) {
@@ -161,6 +163,7 @@ public class Sprint extends BaseEntity {
         this.status = SprintStatus.REVIEW;
         this.prepareFailureReason = null;
         this.preparedAt = now;
+        replaceSetupWarnings(setupWarnings);
     }
 
     public void confirm(
@@ -186,6 +189,14 @@ public class Sprint extends BaseEntity {
     public void addWarning(WarningDto warning) {
         List<WarningDto> updated = new ArrayList<>(warnings);
         updated.add(warning);
+        this.warnings = updated;
+    }
+
+    private void replaceSetupWarnings(List<WarningDto> setupWarnings) {
+        List<WarningDto> updated = new ArrayList<>(warnings.stream()
+                .filter(warning -> !SETUP_WARNING_CODES.contains(warning.code()))
+                .toList());
+        updated.addAll(setupWarnings);
         this.warnings = updated;
     }
 

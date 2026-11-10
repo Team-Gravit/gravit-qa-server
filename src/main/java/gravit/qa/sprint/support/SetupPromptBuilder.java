@@ -66,9 +66,10 @@ public class SetupPromptBuilder {
         String user = llmPromptTemplates.render(USER_TEMPLATE, Map.ofEntries(
                 Map.entry("screenId", spec.screenId()),
                 Map.entry("name", orNone(spec.spec().name())),
-                Map.entry("route", orNone(spec.spec().route())),
+                Map.entry("route", orNone(spec.table().route())),
                 Map.entry("parts", spec.parts().stream().map(Part::name).collect(Collectors.joining(DELIMITER))),
                 Map.entry("specStatus", spec.specStatus().name() + " (" + spec.specStatus().getNotionLabel() + ")"),
+                Map.entry("relatedApis", listOrNone(spec.table().relatedApis())),
                 Map.entry("specMarkdown", orNone(spec.bodyMarkdown())),
                 Map.entry("figmaStates", figmaStates(screens)),
                 Map.entry("changeSummary", orNone(sprint.changeSummary())),
@@ -114,7 +115,7 @@ public class SetupPromptBuilder {
     }
 
     private String openApiExcerpt(OpenApiExcerptDto excerpt) {
-        if (excerpt == null || excerpt.foundOperationIds().isEmpty()) {
+        if (excerpt == null || excerpt.foundApis().isEmpty()) {
             return NONE;
         }
         try {
@@ -146,5 +147,9 @@ public class SetupPromptBuilder {
 
     private String orNone(String value) {
         return StringUtils.hasText(value) ? value.trim() : NONE;
+    }
+
+    private String listOrNone(List<String> values) {
+        return values.isEmpty() ? NONE : String.join(DELIMITER, values);
     }
 }

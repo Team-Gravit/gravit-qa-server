@@ -19,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static gravit.qa.global.exception.domain.CustomErrorCode.SPRINT_ALREADY_REGISTERED;
 import static gravit.qa.global.exception.domain.CustomErrorCode.SPRINT_NOT_FOUND;
@@ -76,9 +77,10 @@ public class SprintCommandService {
             LocalDate periodStart,
             LocalDate periodEnd,
             String figmaFileKey,
+            List<WarningDto> setupWarnings,
             LocalDateTime now
     ) {
-        findSprint(sprintId).completePreparation(periodStart, periodEnd, figmaFileKey, now);
+        findSprint(sprintId).completePreparation(periodStart, periodEnd, figmaFileKey, setupWarnings, now);
 
         Baseline saved = baselineRepository.findBySprintId(sprintId)
                 .map(existing -> {

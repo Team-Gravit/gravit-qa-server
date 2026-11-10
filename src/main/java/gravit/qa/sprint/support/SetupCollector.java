@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import gravit.qa.adapter.exception.InvalidNotionSpecException;
 import gravit.qa.adapter.figma.domain.FigmaFrameWarningType;
 import gravit.qa.adapter.figma.domain.FigmaPlatform;
 import gravit.qa.adapter.figma.dto.internal.FigmaFrameDto;
@@ -20,8 +21,11 @@ import gravit.qa.adapter.github.infrastructure.GithubClient;
 import gravit.qa.adapter.github.support.AosVersionParser;
 import gravit.qa.adapter.notion.dto.internal.NotionPageBodyDto;
 import gravit.qa.adapter.notion.dto.internal.NotionSpecDto;
+import gravit.qa.adapter.notion.dto.internal.NotionSpecTableDto;
 import gravit.qa.adapter.notion.dto.internal.NotionSprintDto;
 import gravit.qa.adapter.notion.infrastructure.NotionClient;
+import gravit.qa.adapter.notion.support.NotionBlockRenderer;
+import gravit.qa.adapter.notion.support.NotionSpecTableParser;
 import gravit.qa.adapter.openapi.dto.internal.OpenApiDocumentDto;
 import gravit.qa.adapter.openapi.dto.internal.OpenApiExcerptDto;
 import gravit.qa.adapter.openapi.infrastructure.OpenApiClient;
@@ -81,12 +85,15 @@ public class SetupCollector {
     private static final String PAGE_FIELD = "page";
     private static final String MARKDOWN_FIELD = "markdown";
     private static final String BLOCKS_FIELD = "blocks";
+    private static final String TABLE_FIELD = "table";
+    private static final String ERROR_FIELD = "error";
     private static final String FILENAME_FIELD = "filename";
     private static final String STATUS_FIELD = "status";
     private static final String ADDITIONS_FIELD = "additions";
     private static final String DELETIONS_FIELD = "deletions";
     private static final String PREVIOUS_FILENAME_FIELD = "previousFilename";
     private static final String DELIMITER = ", ";
+    private static final String SPEC_READ_FAILED_MESSAGE = "%s: %s";
 
     private final SprintQueryService sprintQueryService;
 
@@ -145,6 +152,7 @@ public class SetupCollector {
 
         List<SetupFeatureSpecDto> specs = new ArrayList<>();
         Map<String, List<WarningDto>> screenIdToWarnings = new HashMap<>();
+        List<WarningDto> sprintWarnings = new ArrayList<>();
         Set<String> screenIds = new HashSet<>();
         for (String pageId : sprint.targetFeaturePageIds()) {
             NotionSpecDto spec = notionClient.getSpec(pageId);
@@ -153,17 +161,30 @@ public class SetupCollector {
                 throw new NonRetryableJobException("대상 기능의 화면 ID가 중복됩니다: " + spec.screenId());
             }
 
-            List<Part> parts = toParts(spec);
-            SpecStatus specStatus = toSpecStatus(spec);
-            snapshots.add(save(sprintId, jobId, SnapshotSource.NOTION_SPEC, JSON_FILE.formatted(spec.pageId()), spec.pageId(), spec.screenId(), specSnapshot(spec, body)));
-            if (specStatus == SpecStatus.NEEDS_CHECK) {
-                screenIdToWarnings.put(spec.screenId(), List.of(WarningDto.of(WarningCode.SPEC_NEEDS_CHECK, "Notion 명세 상태가 '확인 필요'입니다")));
+            try {
+                NotionSpecTableDto table = NotionSpecTableParser.parse(body.blocks());
+                List<Part> parts = toParts(table);
+                SpecStatus specStatus = toSpecStatus(table);
+                String markdown = bodyMarkdown(body);
+
+                snapshots.add(saveSpec(sprintId, jobId, spec, specSnapshot(spec, body, table, markdown, null)));
+                if (specStatus == SpecStatus.NEEDS_CHECK) {
+                    screenIdToWarnings.put(spec.screenId(), List.of(WarningDto.of(WarningCode.SPEC_NEEDS_CHECK, "Notion 명세 상태가 '확인 필요'입니다")));
+                }
+                specs.add(SetupFeatureSpecDto.of(spec, table, parts, specStatus, markdown));
+            } catch (InvalidNotionSpecException e) {
+                log.warn("기능 명세를 읽지 못해 이번 준비에서 뺍니다. screenId={}, reason={}", spec.screenId(), e.getMessage());
+                snapshots.add(saveSpec(sprintId, jobId, spec, specSnapshot(spec, body, null, body.markdown(), e.getMessage())));
+                sprintWarnings.add(WarningDto.of(WarningCode.SPEC_READ_FAILED, SPEC_READ_FAILED_MESSAGE.formatted(spec.screenId(), e.getMessage())));
             }
-            specs.add(SetupFeatureSpecDto.of(spec, parts, specStatus, body.markdown()));
+        }
+
+        if (specs.isEmpty()) {
+            throw new NonRetryableJobException("읽을 수 있는 대상 기능 명세가 없습니다: " + String.join(DELIMITER, sprintWarnings.stream().map(WarningDto::message).toList()));
         }
 
         String figmaFileKey = StringUtils.hasText(sprint.figmaQaPageUrl()) ? FigmaFileKeys.fromUrl(sprint.figmaQaPageUrl()) : null;
-        return SetupNotionDto.of(sprint, figmaFileKey, specs, snapshots, screenIdToWarnings);
+        return SetupNotionDto.of(sprint, figmaFileKey, specs, snapshots, screenIdToWarnings, sprintWarnings);
     }
 
     public SetupFigmaDto collectFigma(
@@ -275,39 +296,40 @@ public class SetupCollector {
         Map<String, OpenApiExcerptDto> screenIdToExcerpt = new HashMap<>();
         Map<String, List<WarningDto>> screenIdToWarnings = new HashMap<>();
         for (SetupFeatureSpecDto spec : specs) {
-            List<String> operationIds = spec.spec().relatedOperationIds();
-            if (operationIds.isEmpty()) {
+            List<String> apis = spec.table().relatedApis();
+            if (apis.isEmpty()) {
                 continue;
             }
-            OpenApiExcerptDto excerpt = openApiClient.extract(apiDocs, operationIds);
+            OpenApiExcerptDto excerpt = openApiClient.extract(apiDocs, apis);
             screenIdToExcerpt.put(spec.screenId(), excerpt);
-            if (!excerpt.missingOperationIds().isEmpty()) {
+            if (!excerpt.missingApis().isEmpty()) {
                 screenIdToWarnings.put(spec.screenId(), List.of(WarningDto.of(
                         WarningCode.OPENAPI_OPERATION_MISSING,
-                        "dev OpenAPI에 없는 operationId: " + String.join(DELIMITER, excerpt.missingOperationIds())
+                        "dev OpenAPI에 없는 관련 API: " + String.join(DELIMITER, excerpt.missingApis())
                 )));
             }
         }
         return SetupOpenApiDto.of(screenIdToExcerpt, screenIdToWarnings, snapshot);
     }
 
-    private List<Part> toParts(NotionSpecDto spec) {
-        if (spec.parts().isEmpty()) {
-            throw new NonRetryableJobException("기능 명세 '파트'가 비어 있습니다: " + spec.screenId());
+    private List<Part> toParts(NotionSpecTableDto table) {
+        if (table.parts().isEmpty()) {
+            throw new InvalidNotionSpecException("기본 정보 표에 '" + NotionSpecTableParser.PARTS_ITEM + "' 값이 없습니다");
         }
-        return spec.parts().stream()
+        return table.parts().stream()
                 .map(label -> Part.fromNotionLabel(label)
-                        .orElseThrow(() -> new NonRetryableJobException("알 수 없는 Notion 파트 라벨 '" + label + "' (" + spec.screenId() + ")")))
+                        .orElseThrow(() -> new InvalidNotionSpecException("알 수 없는 파트 라벨 '" + label + "'")))
                 .distinct()
                 .toList();
     }
 
-    private SpecStatus toSpecStatus(NotionSpecDto spec) {
-        if (!StringUtils.hasText(spec.specStatus())) {
-            throw new NonRetryableJobException("기능 명세 '명세 상태'가 비어 있습니다: " + spec.screenId());
-        }
-        return SpecStatus.fromNotionLabel(spec.specStatus())
-                .orElseThrow(() -> new NonRetryableJobException("알 수 없는 Notion 명세 상태 라벨 '" + spec.specStatus() + "' (" + spec.screenId() + ")"));
+    private SpecStatus toSpecStatus(NotionSpecTableDto table) {
+        return SpecStatus.fromNotionLabel(table.specStatus())
+                .orElseThrow(() -> new InvalidNotionSpecException("알 수 없는 명세 상태 라벨 '" + table.specStatus() + "'"));
+    }
+
+    private String bodyMarkdown(NotionPageBodyDto body) {
+        return NotionBlockRenderer.toMarkdown(body.blocks().subList(1, body.blocks().size()));
     }
 
     private String missingReason(
@@ -334,17 +356,33 @@ public class SetupCollector {
 
     private String specSnapshot(
             NotionSpecDto spec,
-            NotionPageBodyDto body
+            NotionPageBodyDto body,
+            NotionSpecTableDto table,
+            String markdown,
+            String error
     ) {
         try {
             ObjectNode snapshot = objectMapper.createObjectNode();
             snapshot.set(PAGE_FIELD, objectMapper.readTree(spec.rawJson()));
-            snapshot.put(MARKDOWN_FIELD, body.markdown());
+            snapshot.set(TABLE_FIELD, objectMapper.valueToTree(table));
+            snapshot.put(MARKDOWN_FIELD, markdown);
             snapshot.set(BLOCKS_FIELD, objectMapper.readTree(body.rawJson()));
+            if (error != null) {
+                snapshot.put(ERROR_FIELD, error);
+            }
             return objectMapper.writeValueAsString(snapshot);
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("Notion 기능 명세 스냅샷을 만들 수 없습니다: " + spec.screenId(), e);
         }
+    }
+
+    private SetupSnapshotDto saveSpec(
+            long sprintId,
+            long jobId,
+            NotionSpecDto spec,
+            String content
+    ) {
+        return save(sprintId, jobId, SnapshotSource.NOTION_SPEC, JSON_FILE.formatted(spec.pageId()), spec.pageId(), spec.screenId(), content);
     }
 
     private String changedFilesSnapshot(List<GithubChangedFileDto> files) {

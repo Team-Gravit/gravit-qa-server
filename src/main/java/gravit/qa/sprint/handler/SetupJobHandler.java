@@ -80,6 +80,7 @@ public class SetupJobHandler implements JobHandler {
                 notion.sprint().periodStart(),
                 notion.sprint().periodEnd(),
                 notion.figmaFileKey(),
+                notion.sprintWarnings(),
                 features,
                 snapshotsOf(notion, figma, diff, openApi)
         );

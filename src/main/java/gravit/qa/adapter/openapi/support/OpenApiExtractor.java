@@ -13,6 +13,7 @@ import java.util.Deque;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -26,16 +27,16 @@ public final class OpenApiExtractor {
     private static final String PATHS_FIELD = "paths";
     private static final String COMPONENTS_FIELD = "components";
     private static final String PARAMETERS_FIELD = "parameters";
-    private static final String OPERATION_ID_FIELD = "operationId";
+    private static final String API_SEPARATOR = " ";
     private static final String POINTER_SEPARATOR = "/";
     private static final int COMPONENT_TYPE_INDEX = 2;
     private static final int COMPONENT_NAME_INDEX = 3;
 
     public static OpenApiExcerptDto extract(
             JsonNode document,
-            Collection<String> operationIds
+            Collection<String> apis
     ) {
-        Set<String> wanted = new LinkedHashSet<>(operationIds);
+        Set<String> wanted = new LinkedHashSet<>(apis);
         Set<String> found = new LinkedHashSet<>();
         Deque<String> pendingRefs = new ArrayDeque<>();
 
@@ -49,7 +50,8 @@ public final class OpenApiExtractor {
             JsonNode pathItem = pathEntry.getValue();
             for (String method : HTTP_METHODS) {
                 JsonNode operation = pathItem.get(method);
-                if (operation == null || !wanted.contains(operation.path(OPERATION_ID_FIELD).asText())) {
+                String api = method.toUpperCase(Locale.ROOT) + API_SEPARATOR + pathEntry.getKey();
+                if (operation == null || !wanted.contains(api)) {
                     continue;
                 }
 
@@ -62,7 +64,7 @@ public final class OpenApiExtractor {
                 }
                 targetItem.set(method, operation.deepCopy());
                 collectRefs(operation, pendingRefs);
-                found.add(operation.path(OPERATION_ID_FIELD).asText());
+                found.add(api);
             }
         }
 
@@ -71,7 +73,7 @@ public final class OpenApiExtractor {
             excerpt.set(COMPONENTS_FIELD, components);
         }
 
-        List<String> missing = wanted.stream().filter(operationId -> !found.contains(operationId)).toList();
+        List<String> missing = wanted.stream().filter(api -> !found.contains(api)).toList();
         return new OpenApiExcerptDto(excerpt, List.copyOf(found), missing);
     }
 

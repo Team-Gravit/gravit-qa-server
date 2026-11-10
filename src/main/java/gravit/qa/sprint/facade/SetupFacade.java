@@ -58,6 +58,7 @@ public class SetupFacade {
                     result.periodStart(),
                     result.periodEnd(),
                     result.figmaFileKey(),
+                    result.sprintWarnings(),
                     KstTimes.now(clock)
             );
 
