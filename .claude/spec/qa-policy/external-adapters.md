@@ -40,6 +40,7 @@
 ## Notion
 
 - 스프린트 `이름`이나 기능 명세 `화면 ID`가 비어 있으면 재시도해도 소용없으므로 재시도하지 않는 실패(`NonRetryableExternalApiException`)로 끝낸다
+- 기능 명세 DB 속성은 `화면 ID`, `화면 이름`, `최종 검증일`만 읽는다. 명세 상태, 파트, 라우트, 관련 API, Figma, FE 스펙 ID는 본문 첫 표에서 읽는다(`setup-job.md`의 기능 명세 기본 정보 표)
 
 ## 배포
 
