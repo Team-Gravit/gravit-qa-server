@@ -20,14 +20,15 @@ public record ChecklistItemCreateRequest(
 
         @NotBlank
         @Schema(
-                description = "검수 항목",
+                description = "행위",
+                example = "로그인 제공자 버튼 순서를 표시한다",
                 requiredMode = Schema.RequiredMode.REQUIRED
         )
         String title,
 
         @NotBlank
         @Schema(
-                description = "기대 결과",
+                description = "설명(세부 확인 내용)",
                 requiredMode = Schema.RequiredMode.REQUIRED
         )
         String expected,
@@ -40,16 +41,10 @@ public record ChecklistItemCreateRequest(
         Set<Part> parts,
 
         @NotNull
-        @Schema(requiredMode = Schema.RequiredMode.REQUIRED)
-        Classification classification,
-
-        @Schema(description = "테스트 카탈로그 ID. AUTO면 필수")
-        String testRef,
-
         @Schema(
-                description = "사전 조건 페르소나 키",
-                example = "learner"
+                description = "AUTO면 1차, MANUAL이면 2차 체크리스트",
+                requiredMode = Schema.RequiredMode.REQUIRED
         )
-        String personaKey
+        Classification classification
 ) {
 }

@@ -1,7 +1,6 @@
 package gravit.qa.checklist.domain;
 
 import gravit.qa.checklist.dto.internal.ChecklistItemDraftDto;
-import gravit.qa.checklist.dto.internal.ClassificationCriteriaDto;
 import gravit.qa.feature.domain.Part;
 import gravit.qa.global.entity.BaseEntity;
 import gravit.qa.global.exception.domain.RestApiException;
@@ -55,18 +54,9 @@ public class ChecklistItem extends BaseEntity {
     @Column(name = "classification", nullable = false)
     private Classification classification;
 
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "criteria")
-    private ClassificationCriteriaDto criteria;
-
-    @Column(name = "automation_gap", nullable = false)
-    private boolean automationGap;
-
-    @Column(name = "test_ref")
-    private String testRef;
-
-    @Column(name = "persona_key", length = 100)
-    private String personaKey;
+    @JdbcTypeCode(SqlTypes.ARRAY)
+    @Column(name = "spec_row_ids", nullable = false)
+    private List<String> specRowIds;
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "source_refs", nullable = false)
@@ -75,10 +65,6 @@ public class ChecklistItem extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "origin", nullable = false)
     private ItemOrigin origin;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "review_state", nullable = false)
-    private ReviewState reviewState;
 
     @Column(name = "sort_order", nullable = false)
     private int sortOrder;
@@ -95,13 +81,9 @@ public class ChecklistItem extends BaseEntity {
             String expected,
             List<String> parts,
             Classification classification,
-            ClassificationCriteriaDto criteria,
-            boolean automationGap,
-            String testRef,
-            String personaKey,
+            List<String> specRowIds,
             List<Long> sourceRefs,
             ItemOrigin origin,
-            ReviewState reviewState,
             int sortOrder
     ) {
         this.sprintId = sprintId;
@@ -110,17 +92,13 @@ public class ChecklistItem extends BaseEntity {
         this.expected = expected;
         this.parts = parts;
         this.classification = classification;
-        this.criteria = criteria;
-        this.automationGap = automationGap;
-        this.testRef = testRef;
-        this.personaKey = personaKey;
+        this.specRowIds = specRowIds;
         this.sourceRefs = sourceRefs;
         this.origin = origin;
-        this.reviewState = reviewState;
         this.sortOrder = sortOrder;
     }
 
-    public static ChecklistItem propose(
+    public static ChecklistItem generate(
             long sprintId,
             long featureId,
             ChecklistItemDraftDto draft,
@@ -134,13 +112,9 @@ public class ChecklistItem extends BaseEntity {
                 .expected(draft.expected())
                 .parts(sortParts(draft.parts()))
                 .classification(draft.classification())
-                .criteria(draft.criteria())
-                .automationGap(draft.automationGap())
-                .testRef(draft.testRef())
-                .personaKey(draft.personaKey())
+                .specRowIds(List.copyOf(draft.specRowIds()))
                 .sourceRefs(List.copyOf(sourceRefs))
                 .origin(ItemOrigin.LLM)
-                .reviewState(ReviewState.PROPOSED)
                 .sortOrder(sortOrder)
                 .build();
     }
@@ -152,8 +126,6 @@ public class ChecklistItem extends BaseEntity {
             String expected,
             List<Part> parts,
             Classification classification,
-            String testRef,
-            String personaKey,
             int sortOrder
     ) {
         return ChecklistItem.builder()
@@ -163,12 +135,9 @@ public class ChecklistItem extends BaseEntity {
                 .expected(expected)
                 .parts(sortParts(parts))
                 .classification(classification)
-                .automationGap(false)
-                .testRef(testRef)
-                .personaKey(personaKey)
+                .specRowIds(List.of())
                 .sourceRefs(List.of())
                 .origin(ItemOrigin.HUMAN)
-                .reviewState(ReviewState.CONFIRMED)
                 .sortOrder(sortOrder)
                 .build();
     }
@@ -191,21 +160,6 @@ public class ChecklistItem extends BaseEntity {
 
     public void changeClassification(Classification classification) {
         this.classification = classification;
-        if (classification == Classification.AUTO) {
-            this.automationGap = false;
-        }
-    }
-
-    public void changeTestRef(String testRef) {
-        this.testRef = testRef;
-    }
-
-    public void changePersonaKey(String personaKey) {
-        this.personaKey = personaKey;
-    }
-
-    public void review(ReviewState reviewState) {
-        this.reviewState = reviewState;
     }
 
     public void requireVersion(int expected) {

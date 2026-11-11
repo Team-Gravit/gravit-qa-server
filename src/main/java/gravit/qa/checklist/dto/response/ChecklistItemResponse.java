@@ -3,7 +3,6 @@ package gravit.qa.checklist.dto.response;
 import gravit.qa.checklist.domain.ChecklistItem;
 import gravit.qa.checklist.domain.Classification;
 import gravit.qa.checklist.domain.ItemOrigin;
-import gravit.qa.checklist.domain.ReviewState;
 import gravit.qa.feature.domain.Part;
 import io.swagger.v3.oas.annotations.media.Schema;
 
@@ -23,13 +22,13 @@ public record ChecklistItemResponse(
         long featureId,
 
         @Schema(
-                description = "검수 항목",
+                description = "행위",
                 requiredMode = Schema.RequiredMode.REQUIRED
         )
         String title,
 
         @Schema(
-                description = "명세 근거 기대 결과",
+                description = "설명(세부 확인 내용)",
                 requiredMode = Schema.RequiredMode.REQUIRED
         )
         String expected,
@@ -40,32 +39,8 @@ public record ChecklistItemResponse(
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED)
         Classification classification,
 
-        @Schema(description = "자동/수동 분류 기준 5개 판정. 사람이 추가한 항목은 null")
-        ClassificationCriteriaResponse criteria,
-
-        @Schema(
-                description = "기준은 충족하나 대응 테스트가 없어 이번에는 수동",
-                requiredMode = Schema.RequiredMode.REQUIRED
-        )
-        boolean automationGap,
-
-        @Schema(description = "테스트 카탈로그 ID")
-        String testRef,
-
-        @Schema(
-                description = "사전 조건 페르소나 키",
-                example = "learner"
-        )
-        String personaKey,
-
-        @Schema(description = "근거 스냅샷 ID")
-        List<Long> sourceRefs,
-
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED)
         ItemOrigin origin,
-
-        @Schema(requiredMode = Schema.RequiredMode.REQUIRED)
-        ReviewState reviewState,
 
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED)
         List<CheckCellResponse> cells,
@@ -88,13 +63,7 @@ public record ChecklistItemResponse(
                 item.getExpected(),
                 item.getParts(),
                 item.getClassification(),
-                ClassificationCriteriaResponse.from(item.getCriteria()),
-                item.isAutomationGap(),
-                item.getTestRef(),
-                item.getPersonaKey(),
-                item.getSourceRefs(),
                 item.getOrigin(),
-                item.getReviewState(),
                 cells,
                 item.getVersion()
         );

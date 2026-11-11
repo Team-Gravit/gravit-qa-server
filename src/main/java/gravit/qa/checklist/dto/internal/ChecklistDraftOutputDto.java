@@ -7,7 +7,7 @@ import java.util.List;
 
 public record ChecklistDraftOutputDto(
         @JsonProperty(required = true)
-        @JsonPropertyDescription("기능 1개의 체크 항목 초안. 1개 이상")
+        @JsonPropertyDescription("화면 1개의 체크 항목. 1개 이상")
         List<ChecklistDraftItemOutputDto> items
 ) {
 }

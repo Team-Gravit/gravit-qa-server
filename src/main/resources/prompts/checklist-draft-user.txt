@@ -1,4 +1,4 @@
-아래 기능의 체크 항목 초안을 만들어라.
+아래 화면의 체크 항목을 만들어라.
 
 ## 기능
 - 화면 ID: {{screenId}}
@@ -7,18 +7,16 @@
 - 파트: {{parts}}
 - 명세 상태: {{specStatus}} (NEEDS_CHECK이면 명세가 확인되지 않았으니 명세에 적힌 것 밖을 추측하지 말 것)
 - 관련 API: {{relatedApis}}
+- 이번 스프린트 변경 화면: {{changed}}
 
-## 기능 명세 본문
+## 다뤄야 할 행 번호
+{{rowIds}}
+
+## 기준 명세 본문
 {{specMarkdown}}
-
-## Figma 화면 상태 (플랫폼별)
-{{figmaStates}}
 
 ## 스프린트 변경 요약
 {{changeSummary}}
 
 ## 관련 API (OpenAPI 발췌)
 {{openApiExcerpt}}
-
-## 변경 파일 (저장소별, 상태 경로)
-{{changedFiles}}
