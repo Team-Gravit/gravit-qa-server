@@ -7,6 +7,7 @@ public record SetupTargetDto(
         long sprintId,
         String sprintKey,
         String notionPageId,
+        String figmaFileKey,
         SprintStatus status
 ) {
 
@@ -15,6 +16,7 @@ public record SetupTargetDto(
                 sprint.getId(),
                 sprint.getSprintKey(),
                 sprint.getNotionPageId(),
+                sprint.getFigmaFileKey(),
                 sprint.getStatus()
         );
     }

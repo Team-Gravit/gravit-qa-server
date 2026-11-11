@@ -30,11 +30,19 @@ public class JobQueryService {
     }
 
     @Transactional(readOnly = true)
-    public Optional<Long> findLatestJobId(
-            long sprintId,
-            JobType type
-    ) {
-        return jobQueueRepository.findLatestJobId(sprintId, type);
+    public Optional<JobDto> findLatestJob(long sprintId) {
+        return jobQueueRepository.findLatestJob(sprintId);
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<JobResponse> findLatestJobResponse(long sprintId) {
+        return jobQueueRepository.findLatestJob(sprintId)
+                .map(job -> JobResponse.of(job, jobQueueRepository.findSteps(job.id())));
+    }
+
+    @Transactional(readOnly = true)
+    public boolean hasActiveJob(long sprintId) {
+        return jobQueueRepository.existsActiveJob(sprintId);
     }
 
     @Transactional(readOnly = true)

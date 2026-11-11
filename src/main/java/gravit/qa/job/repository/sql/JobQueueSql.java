@@ -133,10 +133,21 @@ public class JobQueueSql {
             RETURNING id, type, sprint_id, status
             """;
 
-    public static final String SELECT_LATEST_JOB_ID = """
-            SELECT MAX(id)
+    public static final String SELECT_LATEST_JOB = """
+            SELECT id, type, sprint_id, status, attempt, max_attempts, run_after,
+                   cancel_requested, last_error, created_at, finished_at
             FROM job
-            WHERE sprint_id = :sprintId AND type = :type
+            WHERE sprint_id = :sprintId
+            ORDER BY id DESC
+            LIMIT 1
+            """;
+
+    public static final String EXISTS_ACTIVE_JOB = """
+            SELECT EXISTS (
+                SELECT 1
+                FROM job
+                WHERE sprint_id = :sprintId AND status IN ('QUEUED', 'RUNNING')
+            )
             """;
 
     public static final String SELECT_SPRINT_IDS_WITH_ACTIVE_JOB = """

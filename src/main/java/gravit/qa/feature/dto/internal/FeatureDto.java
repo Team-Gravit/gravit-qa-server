@@ -13,6 +13,7 @@ public record FeatureDto(
         String route,
         List<Part> parts,
         SpecStatus specStatus,
+        List<String> relatedApis,
         String notionPageId
 ) {
 
@@ -24,6 +25,7 @@ public record FeatureDto(
                 feature.getRoute(),
                 List.copyOf(feature.getParts()),
                 feature.getSpecStatus(),
+                List.copyOf(feature.getRelatedApis()),
                 feature.getNotionPageId()
         );
     }

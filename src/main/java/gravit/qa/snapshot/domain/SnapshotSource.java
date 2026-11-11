@@ -4,7 +4,6 @@ public enum SnapshotSource {
 
     NOTION_SPRINT,
     NOTION_SPEC,
-    FIGMA_FRAME,
-    GITHUB_DIFF,
+    FIGMA_NODES,
     OPENAPI
 }
