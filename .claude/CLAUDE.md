@@ -1,7 +1,8 @@
 # Gravit QA
 
 Gravit(CS 학습 서비스)의 QA 플랫폼 백엔드. 백오피스(gravit-admin-web) QA 메뉴의 API를 제공하고,
-Figma·Notion·코드 diff·OpenAPI를 수집해 체크리스트 초안을 만들며, 자동 영역을 실행하고 결과를 기록한다.
+Notion 기능 명세에 수정 이력을 반영해 기준 명세를 만든 뒤 체크리스트를 생성하고, Figma 시안을 명세와 비교(디자인 검수)하며,
+웹·앱·서버 `qa-baseline` 코드를 읽어 1차 판정을 기록한다. 2차는 사람이 수동으로 검수한다.
 
 설계 원본: `docs/design/03_DESIGN.md`, API 계약: `docs/api/openapi.yaml`
 
@@ -18,12 +19,11 @@ Figma·Notion·코드 diff·OpenAPI를 수집해 체크리스트 초안을 만�
 
 ## 실행 단위
 
-같은 이미지를 프로필로 나눠 두 컨테이너로 띄운다.
+컨테이너 하나(`qa-api`)로 띄운다. 자동 실행 워커(e2e 프로필)는 D13으로 없앴다.
 
 | 프로필 | 역할 | 소비 작업 |
 |---|---|---|
-| `api` | REST API, 셋업·리뷰 수집·증적 정리 작업 | `SETUP`, `REVIEW_COLLECT`, `EVIDENCE_CLEANUP` |
-| `e2e` | 자동 실행 워커(Playwright) | `AUTO_RUN` |
+| `api` | REST API, 명세 로드와 QA 준비 작업 | `SPEC_LOAD`(연결, 명세 수집), `QA_PREPARE`(체크리스트 생성, 디자인 검수, 1차 자동화 검수) |
 
 ## 빌드 & 실행
 
@@ -46,7 +46,9 @@ Figma·Notion·코드 diff·OpenAPI를 수집해 체크리스트 초안을 만�
 - LLM은 준비·해석에만 쓴다. 실행과 판정은 결정적 코드로 처리한다. 에이전트 자율 루프를 만들지 마라
 - LLM 출력은 반드시 JSON 스키마와 참조 무결성으로 검증한다. 실패 시 오류를 붙여 최대 2회 재요청한다
 - 외부 연동(Figma·Notion·GitHub·LLM)은 `adapter`/`infrastructure`에 두고 REST로 직접 호출한다. MCP를 쓰지 마라
-- 정의(테스트 코드·프롬프트·스키마)는 Git, 상태(체크 결과·이력)는 DB
+- 정의(프롬프트·출력 스키마)는 Git, 상태(체크 결과·이력)는 DB
+- 1차 판정은 저장소 코드를 읽기만 한다. 저장소 테스트를 실행하지 않고, gravit-server, gravit-web, gravit-aos에 쓰지 않는다
+- Notion 쓰기는 이번 스프린트 `대상 기능` 페이지 본문과 수정 이력 `반영일` 칸으로 제한하고(`NotionWriteGuard`), 관리자가 승인한 반영 제안만 쓴다
 
 ## 규칙 참조
 

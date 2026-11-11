@@ -25,8 +25,9 @@ paths:
 ## 목(mock)과 스텁
 
 - 외부 HTTP 연동은 JDK `HttpServer` 스텁으로 대체한다 (`AdminMeStubServer` 참고). 실제 외부 서비스를 호출하지 마라
-- 작업 처리기 스텁은 별도 설정 클래스를 `@Import`로 등록한다(`@Nested`와 함께 쓰면 중첩 `@TestConfiguration`이 컨텍스트를 분리시킨다) (`JobQueueIntegrationTest` 참고)
-  - 실제 처리기가 있는 유형(`SETUP` 등)은 스텁을 등록하지 마라. 유형당 처리기가 둘이 되어 `JobRunner` 기동이 실패한다. `@MockitoSpyBean`으로 실제 처리기의 `handle`을 바꾼다
+- 작업 처리기의 동작을 바꿀 때는 `@MockitoSpyBean`으로 실제 처리기의 `handle`을 바꾼다 (`JobQueueIntegrationTest` 참고)
+  - 모든 작업 유형(`SPEC_LOAD`, `QA_PREPARE`)에 실제 처리기가 있으므로 스텁 처리기 빈을 따로 등록하지 마라. 유형당 처리기가 둘이 되어 `JobRunner` 기동이 실패한다
+  - 별도 설정 클래스는 `@Import`로 등록한다(`@Nested`와 함께 쓰면 중첩 `@TestConfiguration`이 컨텍스트를 분리시킨다)
 - 실패 주입·호출 검증 용도에 한해 `@MockitoBean`, `@MockitoSpyBean`을 쓴다
 
 ## 순수 JUnit 테스트
