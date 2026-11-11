@@ -17,6 +17,7 @@ class CheckCellTest {
 
     private static final long ITEM_ID = 1L;
     private static final long ADMIN_ID = 7L;
+    private static final String REASON = "항목 수정으로 판정 초기화";
     private static final LocalDateTime NOW = LocalDateTime.of(2026, 10, 16, 12, 0);
 
     @Nested
@@ -49,7 +50,7 @@ class CheckCellTest {
             CheckCell web = 셀(Part.WEB, List.of(Part.WEB, Part.SERVER));
 
             // when
-            Optional<CheckCellHistory> history = web.applyParts(List.of(Part.SERVER), ADMIN_ID, NOW);
+            Optional<CheckCellHistory> history = web.applyParts(List.of(Part.SERVER), REASON, ADMIN_ID, NOW);
 
             // then
             assertSoftly(softly -> {
@@ -69,7 +70,7 @@ class CheckCellTest {
             CheckCell app = 셀(Part.APP, List.of(Part.WEB));
 
             // when
-            Optional<CheckCellHistory> history = app.applyParts(List.of(Part.WEB, Part.APP), ADMIN_ID, NOW);
+            Optional<CheckCellHistory> history = app.applyParts(List.of(Part.WEB, Part.APP), REASON, ADMIN_ID, NOW);
 
             // then
             assertThat(app.getState()).isEqualTo(CellState.UNCHECKED);
@@ -82,7 +83,7 @@ class CheckCellTest {
             CheckCell web = 셀(Part.WEB, List.of(Part.WEB));
 
             // when
-            Optional<CheckCellHistory> history = web.applyParts(List.of(Part.WEB, Part.SERVER), ADMIN_ID, NOW);
+            Optional<CheckCellHistory> history = web.applyParts(List.of(Part.WEB, Part.SERVER), REASON, ADMIN_ID, NOW);
 
             // then
             assertThat(history).isEmpty();

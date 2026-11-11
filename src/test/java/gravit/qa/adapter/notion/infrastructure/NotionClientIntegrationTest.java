@@ -7,6 +7,7 @@ import gravit.qa.adapter.notion.dto.internal.NotionPageBodyDto;
 import gravit.qa.adapter.notion.dto.internal.NotionSpecDto;
 import gravit.qa.adapter.notion.dto.internal.NotionSpecTableDto;
 import gravit.qa.adapter.notion.dto.internal.NotionSprintDto;
+import gravit.qa.adapter.notion.dto.internal.NotionWriteScopeDto;
 import gravit.qa.adapter.notion.support.NotionSpecTableParser;
 import gravit.qa.support.HttpStubServer;
 import gravit.qa.support.HttpStubServer.RecordedRequest;
@@ -20,6 +21,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import static gravit.qa.adapter.notion.fixture.NotionSpecPageFixture.QUIZ_02_PAGE_ID;
 import static gravit.qa.adapter.notion.fixture.NotionSpecPageFixture.QUIZ_02_TABLE_ID;
@@ -75,7 +78,6 @@ class NotionClientIntegrationTest {
                 softly.assertThat(sprint.targetFeaturePageIds()).containsExactly(SPEC_ID);
                 softly.assertThat(sprint.changeSummary()).isEqualTo("유닛 상세 개편");
                 softly.assertThat(sprint.figmaQaPageUrl()).isEqualTo("https://www.figma.com/design/AbC123/Gravit?node-id=1-1");
-                softly.assertThat(sprint.qaBaseline()).isEmpty();
                 softly.assertThat(request.header("Authorization")).isEqualTo("Bearer test-notion-token");
                 softly.assertThat(request.header("Notion-Version")).isEqualTo("2022-06-28");
             });
@@ -119,7 +121,7 @@ class NotionClientIntegrationTest {
         void 대상_기능의_화면_ID와_화면_이름과_최종_검증일을_읽는다() {
             // given
             externalApiStubServer.stub("GET", "/v1/pages/" + SPEC_ID, json(200, specPage()));
-            NotionSprintDto sprint = new NotionSprintDto(SPRINT_ID, "2026-S21", null, null, List.of(SPEC_ID), null, null, null, "{}");
+            NotionSprintDto sprint = new NotionSprintDto(SPRINT_ID, "2026-S21", null, null, List.of(SPEC_ID), null, null, "{}");
 
             // when
             List<NotionSpecDto> specs = notionClient.getTargetSpecs(sprint);
@@ -187,38 +189,64 @@ class NotionClientIntegrationTest {
     }
 
     @Nested
-    @DisplayName("QA 기준점을 기록할 때")
-    class 기준점_기록 {
+    @DisplayName("명세 본문에 쓸 때")
+    class 본문_쓰기 {
+
+        private static final String BLOCK_ID = "44444444444444444444444444444444";
+        private static final String CREATED_ID = "55555555555555555555555555555555";
+        private static final NotionWriteScopeDto SCOPE = NotionWriteScopeDto.of(
+                SPEC_ID,
+                Map.of(BLOCK_ID, "paragraph"),
+                Map.of(),
+                Map.of(),
+                Set.of(SPEC_ID),
+                Set.of(BLOCK_ID),
+                Map.of(),
+                -1
+        );
 
         @Test
-        void 스프린트_행인지_확인한_뒤_QA_기준점_속성만_PATCH한다() throws Exception {
+        void 글_블록_문장을_바꾸면_rich_text만_PATCH한다() throws Exception {
             // given
-            externalApiStubServer.stub("GET", SPRINT_PATH, json(200, sprintPage(SPRINT_DB, false)));
-            externalApiStubServer.stub("PATCH", SPRINT_PATH, json(200, sprintPage(SPRINT_DB, false)));
+            externalApiStubServer.stub("PATCH", "/v1/blocks/" + BLOCK_ID, json(200, "{\"object\": \"block\", \"id\": \"" + BLOCK_ID + "\"}"));
 
             // when
-            notionClient.updateSprintBaseline(SPRINT_ID, "gravit-server@1111111");
+            notionClient.updateBlockText(BLOCK_ID, "paragraph", "바뀐 문장", SCOPE);
 
             // then
-            RecordedRequest patch = externalApiStubServer.requests("PATCH", SPRINT_PATH).getFirst();
+            RecordedRequest patch = externalApiStubServer.requests("PATCH", "/v1/blocks/" + BLOCK_ID).getFirst();
             JsonNode body = objectMapper.readTree(patch.body());
             assertSoftly(softly -> {
                 softly.assertThat(body.size()).isEqualTo(1);
-                softly.assertThat(body.path("properties").size()).isEqualTo(1);
-                softly.assertThat(body.at("/properties/QA 기준점/rich_text/0/text/content").asText()).isEqualTo("gravit-server@1111111");
-                softly.assertThat(patch.header("Content-Type")).startsWith("application/json");
+                softly.assertThat(body.at("/paragraph/rich_text/0/text/content").asText()).isEqualTo("바뀐 문장");
             });
         }
 
         @Test
-        void 기능_명세_행에는_기록하지_않는다() {
+        void 블록_뒤에_추가하면_after를_보내고_새_블록_ID를_돌려준다() throws Exception {
             // given
-            externalApiStubServer.stub("GET", SPRINT_PATH, json(200, sprintPage(SPEC_DB, false)));
+            externalApiStubServer.stub("PATCH", "/v1/blocks/" + SPEC_ID + "/children", json(200, """
+                    {"results": [{"id": "%s"}, {"id": "%s"}]}
+                    """.formatted(BLOCK_ID, CREATED_ID)));
 
+            // when
+            String created = notionClient.appendTextBlock(SPEC_ID, BLOCK_ID, "paragraph", "새 문장", SCOPE);
+
+            // then
+            JsonNode body = objectMapper.readTree(externalApiStubServer.requests("PATCH", "/v1/blocks/" + SPEC_ID + "/children").getFirst().body());
+            assertSoftly(softly -> {
+                softly.assertThat(created).isEqualTo(CREATED_ID);
+                softly.assertThat(body.path("after").asText()).isEqualTo(BLOCK_ID);
+                softly.assertThat(body.at("/children/0/paragraph/rich_text/0/text/content").asText()).isEqualTo("새 문장");
+            });
+        }
+
+        @Test
+        void 범위_밖_블록은_보내기_전에_막는다() {
             // when & then
-            assertThatThrownBy(() -> notionClient.updateSprintBaseline(SPRINT_ID, "x"))
+            assertThatThrownBy(() -> notionClient.updateBlockText("66666666666666666666666666666666", "paragraph", "x", SCOPE))
                     .isInstanceOf(NonRetryableExternalApiException.class);
-            assertThat(externalApiStubServer.requests("PATCH", SPRINT_PATH)).isEmpty();
+            assertThat(externalApiStubServer.requests()).isEmpty();
         }
     }
 

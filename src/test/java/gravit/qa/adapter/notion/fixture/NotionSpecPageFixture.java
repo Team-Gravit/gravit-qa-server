@@ -9,6 +9,7 @@ import gravit.qa.adapter.notion.dto.internal.NotionBlockDto;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public final class NotionSpecPageFixture {
 
@@ -22,6 +23,7 @@ public final class NotionSpecPageFixture {
     public static final String AI_01_TABLE_ID = "3fb5b32f003c81e50000000000000001";
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final AtomicInteger ROW_SEQUENCE = new AtomicInteger();
     private static final String FIGMA_FRAME_URL = "https://www.figma.com/design/hu4c6qCEMB62qHXk2v8Gsl/?node-id=";
     private static final String LIST_MARKER = "  • ";
     private static final String LINE_BREAK = "\n";
@@ -164,12 +166,39 @@ public final class NotionSpecPageFixture {
             ObjectNode item,
             ObjectNode... value
     ) {
-        ObjectNode row = 블록(null, "table_row", false);
+        ObjectNode row = 블록(다음_행_ID(), "table_row", false);
         ArrayNode cells = row.putObject("table_row").putArray("cells");
         cells.addArray().add(item);
         ArrayNode valueCell = cells.addArray();
         for (ObjectNode text : value) {
             valueCell.add(text);
+        }
+        return row;
+    }
+
+    public static ObjectNode 표_블록(
+            String id,
+            int width
+    ) {
+        ObjectNode block = 블록(id, "table", true);
+        block.putObject("table")
+                .put("table_width", width)
+                .put("has_column_header", true)
+                .put("has_row_header", false);
+        return block;
+    }
+
+    public static ObjectNode 표_행(
+            String id,
+            String... cells
+    ) {
+        ObjectNode row = 블록(id, "table_row", false);
+        ArrayNode cellArray = row.putObject("table_row").putArray("cells");
+        for (String cell : cells) {
+            ArrayNode texts = cellArray.addArray();
+            if (!cell.isEmpty()) {
+                texts.add(글자(cell));
+            }
         }
         return row;
     }
@@ -279,6 +308,10 @@ public final class NotionSpecPageFixture {
             richText.add(text);
         }
         return block;
+    }
+
+    private static String 다음_행_ID() {
+        return String.format("9999%028x", ROW_SEQUENCE.incrementAndGet());
     }
 
     private static ObjectNode 블록(

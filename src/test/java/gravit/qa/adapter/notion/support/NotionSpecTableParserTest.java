@@ -185,7 +185,7 @@ class NotionSpecTableParserTest {
             // when & then
             assertThatThrownBy(() -> NotionSpecTableParser.parse(blocks))
                     .isInstanceOf(InvalidNotionSpecException.class)
-                    .hasMessage("본문 첫 블록이 기본 정보 표가 아닙니다");
+                    .hasMessage("명세 맨 위에 항목, 값 표가 없습니다(본문 첫 블록이 표가 아님)");
         }
 
         @Test
@@ -193,7 +193,7 @@ class NotionSpecTableParserTest {
             // when & then
             assertThatThrownBy(() -> NotionSpecTableParser.parse(List.of()))
                     .isInstanceOf(InvalidNotionSpecException.class)
-                    .hasMessage("본문 첫 블록이 기본 정보 표가 아닙니다");
+                    .hasMessage("명세 맨 위에 항목, 값 표가 없습니다(본문 첫 블록이 표가 아님)");
         }
 
         @Test
@@ -204,7 +204,7 @@ class NotionSpecTableParserTest {
             // when & then
             assertThatThrownBy(() -> NotionSpecTableParser.parse(blocks))
                     .isInstanceOf(InvalidNotionSpecException.class)
-                    .hasMessage("기본 정보 표에 '명세 상태' 값이 없습니다");
+                    .hasMessage("명세 맨 위 표의 '명세 상태' 칸이 비어 있습니다");
         }
 
         @Test
@@ -215,7 +215,7 @@ class NotionSpecTableParserTest {
             // when & then
             assertThatThrownBy(() -> NotionSpecTableParser.parse(blocks))
                     .isInstanceOf(InvalidNotionSpecException.class)
-                    .hasMessage("기본 정보 표에 '명세 상태' 값이 없습니다");
+                    .hasMessage("명세 맨 위 표의 '명세 상태' 칸이 비어 있습니다");
         }
     }
 

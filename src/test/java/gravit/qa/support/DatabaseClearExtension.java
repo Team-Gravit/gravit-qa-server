@@ -1,6 +1,7 @@
 package gravit.qa.support;
 
 import gravit.qa.adapter.llm.support.LlmCallGuard;
+import gravit.qa.autoReview.support.RepoSourceReader;
 import gravit.qa.security.support.AdminVerificationCache;
 import org.junit.jupiter.api.extension.BeforeEachCallback;
 import org.junit.jupiter.api.extension.ExtensionContext;
@@ -34,5 +35,6 @@ public class DatabaseClearExtension implements BeforeEachCallback {
         applicationContext.getBean(HttpStubServer.class).reset();
         applicationContext.getBean(RecordingSleeper.class).reset();
         applicationContext.getBean(LlmCallGuard.class).clear();
+        applicationContext.getBean(RepoSourceReader.class).clear();
     }
 }
