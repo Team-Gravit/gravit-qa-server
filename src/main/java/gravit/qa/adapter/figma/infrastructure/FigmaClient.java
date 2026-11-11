@@ -3,9 +3,7 @@ package gravit.qa.adapter.figma.infrastructure;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import gravit.qa.adapter.exception.NonRetryableExternalApiException;
 import gravit.qa.adapter.figma.config.FigmaProps;
-import gravit.qa.adapter.figma.dto.internal.FigmaFrameImagesDto;
 import gravit.qa.adapter.figma.dto.internal.FigmaQaFramesDto;
 import gravit.qa.adapter.figma.support.FigmaFileKeys;
 import gravit.qa.adapter.figma.support.FigmaFrameParser;
@@ -19,7 +17,6 @@ import org.springframework.web.util.UriBuilder;
 
 import java.net.URI;
 import java.time.Clock;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -27,7 +24,6 @@ import java.util.Optional;
 import java.util.function.Function;
 
 import static gravit.qa.adapter.domain.ExternalApi.FIGMA;
-import static gravit.qa.adapter.domain.ExternalApi.FIGMA_IMAGE;
 
 @Component
 public class FigmaClient {
@@ -35,24 +31,17 @@ public class FigmaClient {
     private static final String TOKEN_HEADER = "X-Figma-Token";
     private static final String FILE_PATH = "/v1/files/{fileKey}";
     private static final String NODES_PATH = "/v1/files/{fileKey}/nodes";
-    private static final String IMAGES_PATH = "/v1/images/{fileKey}";
     private static final String DEPTH_PARAM = "depth";
     private static final String IDS_PARAM = "ids";
-    private static final String FORMAT_PARAM = "format";
-    private static final String SCALE_PARAM = "scale";
-    private static final String PNG_FORMAT = "png";
     private static final String CANVAS = "CANVAS";
     private static final String ID_DELIMITER = ",";
-    private static final String DOWNLOAD_OPERATION = "PNG 다운로드";
     private static final int PAGES_DEPTH = 1;
     private static final int QA_PAGE_DEPTH = 4;
     private static final int SECTION_EXPAND_DEPTH = 2;
     private static final int MAX_EXPAND_ROUNDS = 5;
-    private static final int EXPORT_BATCH_SIZE = 50;
-    private static final int EXPORT_SCALE = 1;
+    private static final int NODES_BATCH_SIZE = 20;
 
     private final RestClient restClient;
-    private final RestClient downloadClient;
 
     private final ExternalCallExecutor externalCallExecutor;
 
@@ -66,9 +55,6 @@ public class FigmaClient {
             ObjectMapper objectMapper,
             FigmaProps figmaProps
     ) {
-        this.downloadClient = restClientBuilder.clone()
-                .requestFactory(HttpRequestFactories.jdk(figmaProps.timeout()))
-                .build();
         this.restClient = restClientBuilder
                 .baseUrl(figmaProps.baseUrl())
                 .requestFactory(HttpRequestFactories.jdk(figmaProps.timeout()))
@@ -107,39 +93,19 @@ public class FigmaClient {
         return FigmaFrameParser.parse(fileKey, qaPageNode, sprintKey);
     }
 
-    public FigmaFrameImagesDto exportPng(
+    public Map<String, JsonNode> getFrameNodes(
             String fileKey,
             List<String> nodeIds
     ) {
         FigmaFileKeys.requireValid(fileKey);
         List<String> targets = nodeIds.stream().distinct().toList();
 
-        Map<String, byte[]> nodeIdToPng = new LinkedHashMap<>();
-        List<String> failedNodeIds = new ArrayList<>();
-        for (int start = 0; start < targets.size(); start += EXPORT_BATCH_SIZE) {
-            List<String> batch = targets.subList(start, Math.min(targets.size(), start + EXPORT_BATCH_SIZE));
-            String operation = "GET /v1/images/" + fileKey;
-            JsonNode body = getJson(operation, uri -> uri.path(IMAGES_PATH)
-                    .queryParam(IDS_PARAM, String.join(ID_DELIMITER, batch))
-                    .queryParam(FORMAT_PARAM, PNG_FORMAT)
-                    .queryParam(SCALE_PARAM, EXPORT_SCALE)
-                    .build(fileKey));
-
-            String error = body.path("err").asText(null);
-            if (StringUtils.hasText(error)) {
-                throw new NonRetryableExternalApiException(FIGMA, null, "Figma 이미지 렌더 요청이 실패했습니다: " + error);
-            }
-
-            for (String nodeId : batch) {
-                String imageUrl = body.path("images").path(nodeId).asText(null);
-                if (StringUtils.hasText(imageUrl)) {
-                    nodeIdToPng.put(nodeId, download(imageUrl));
-                } else {
-                    failedNodeIds.add(nodeId);
-                }
-            }
+        Map<String, JsonNode> nodeIdToNode = new LinkedHashMap<>();
+        for (int start = 0; start < targets.size(); start += NODES_BATCH_SIZE) {
+            List<String> batch = targets.subList(start, Math.min(targets.size(), start + NODES_BATCH_SIZE));
+            nodeIdToNode.putAll(getNodes(fileKey, batch, null));
         }
-        return new FigmaFrameImagesDto(nodeIdToPng, failedNodeIds);
+        return nodeIdToNode;
     }
 
     private Optional<JsonNode> findQaPage(JsonNode file) {
@@ -174,13 +140,17 @@ public class FigmaClient {
     private Map<String, JsonNode> getNodes(
             String fileKey,
             List<String> nodeIds,
-            int depth
+            Integer depth
     ) {
         String ids = String.join(ID_DELIMITER, nodeIds);
-        JsonNode body = getJson("GET /v1/files/" + fileKey + "/nodes?depth=" + depth, uri -> uri.path(NODES_PATH)
-                .queryParam(IDS_PARAM, ids)
-                .queryParam(DEPTH_PARAM, depth)
-                .build(fileKey));
+        String operation = "GET /v1/files/" + fileKey + "/nodes" + (depth == null ? "" : "?depth=" + depth);
+        JsonNode body = getJson(operation, uri -> {
+            uri.path(NODES_PATH).queryParam(IDS_PARAM, ids);
+            if (depth != null) {
+                uri.queryParam(DEPTH_PARAM, depth);
+            }
+            return uri.build(fileKey);
+        });
 
         Map<String, JsonNode> idToNode = new LinkedHashMap<>();
         for (String nodeId : nodeIds) {
@@ -190,13 +160,6 @@ public class FigmaClient {
             }
         }
         return idToNode;
-    }
-
-    private byte[] download(String imageUrl) {
-        URI uri = URI.create(imageUrl);
-        return externalCallExecutor.execute(FIGMA_IMAGE, DOWNLOAD_OPERATION, () -> downloadClient.get()
-                .uri(uri)
-                .exchange((request, response) -> ExternalResponses.readBytes(FIGMA_IMAGE, DOWNLOAD_OPERATION, response, clock)));
     }
 
     private JsonNode getJson(

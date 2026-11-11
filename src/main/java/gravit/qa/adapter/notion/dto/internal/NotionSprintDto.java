@@ -11,7 +11,6 @@ public record NotionSprintDto(
         List<String> targetFeaturePageIds,
         String changeSummary,
         String figmaQaPageUrl,
-        String qaBaseline,
         String rawJson
 ) {
 }

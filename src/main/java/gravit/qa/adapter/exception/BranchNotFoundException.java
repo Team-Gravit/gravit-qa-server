@@ -5,14 +5,14 @@ import gravit.qa.adapter.github.domain.GithubRepo;
 import lombok.Getter;
 
 @Getter
-public class ReleaseBranchNotFoundException extends NonRetryableExternalApiException {
+public class BranchNotFoundException extends NonRetryableExternalApiException {
 
     private static final int STATUS_NOT_FOUND = 404;
 
     private final GithubRepo repo;
     private final String branch;
 
-    public ReleaseBranchNotFoundException(
+    public BranchNotFoundException(
             GithubRepo repo,
             String branch
     ) {

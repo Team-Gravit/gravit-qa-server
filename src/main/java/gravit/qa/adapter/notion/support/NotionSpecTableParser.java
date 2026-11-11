@@ -40,13 +40,13 @@ public final class NotionSpecTableParser {
 
     public static NotionSpecTableDto parse(List<NotionBlockDto> blocks) {
         if (blocks.isEmpty() || !TABLE.equals(blocks.getFirst().type())) {
-            throw new InvalidNotionSpecException("본문 첫 블록이 기본 정보 표가 아닙니다");
+            throw new InvalidNotionSpecException("명세 맨 위에 항목, 값 표가 없습니다(본문 첫 블록이 표가 아님)");
         }
 
         Map<String, JsonNode> itemToCell = itemToCell(blocks.getFirst());
         String specStatus = value(cellOf(itemToCell, STATUS_ITEM));
         if (specStatus == null) {
-            throw new InvalidNotionSpecException("기본 정보 표에 '" + STATUS_ITEM + "' 값이 없습니다");
+            throw new InvalidNotionSpecException("명세 맨 위 표의 '" + STATUS_ITEM + "' 칸이 비어 있습니다");
         }
 
         return NotionSpecTableDto.of(
