@@ -72,7 +72,7 @@
 
 | 범위 | 위치 | 코드 |
 |---|---|---|
-| 스프린트 | `sprint.warnings` `[{code, message}]` | `NOTION_WRITE_FAILED` |
+| 스프린트 | `sprint.warnings` `[{code, message}]` | `NOTION_WRITE_FAILED`, `SPEC_READ_FAILED`(`setup-job.md`의 스프린트 경고 표) |
 | 기능(스프린트별) | `sprint_feature.warnings` | `setup-job.md`의 기능 경고 표 |
 | 저장소 | `baseline_repo.version_code_warning` | `VERSION_CODE_NOT_INCREASED`(리포트에서 변환) |
 

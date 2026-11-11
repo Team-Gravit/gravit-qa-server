@@ -14,6 +14,7 @@ public final class NotionBlockRenderer {
 
     private static final String INDENT = "  ";
     private static final String LINE_BREAK = "\n";
+    private static final String TABLE_CELL_LINE_BREAK = "<br>";
     private static final String NUMBERED_LIST_ITEM = "numbered_list_item";
     private static final String TABLE = "table";
     private static final String TABLE_ROW = "table_row";
@@ -94,7 +95,7 @@ public final class NotionBlockRenderer {
                 continue;
             }
             List<String> cells = new ArrayList<>();
-            row.content().path("cells").forEach(cell -> cells.add(richText(cell)));
+            row.content().path("cells").forEach(cell -> cells.add(richText(cell).replace(LINE_BREAK, TABLE_CELL_LINE_BREAK)));
             lines.add(indent + "| " + String.join(" | ", cells) + " |");
             if (header) {
                 lines.add(indent + "|" + "---|".repeat(cells.size()));

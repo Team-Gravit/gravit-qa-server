@@ -10,7 +10,8 @@ public record SetupNotionDto(
         String figmaFileKey,
         List<SetupFeatureSpecDto> specs,
         List<SetupSnapshotDto> snapshots,
-        Map<String, List<WarningDto>> screenIdToWarnings
+        Map<String, List<WarningDto>> screenIdToWarnings,
+        List<WarningDto> sprintWarnings
 ) {
 
     public static SetupNotionDto of(
@@ -18,9 +19,10 @@ public record SetupNotionDto(
             String figmaFileKey,
             List<SetupFeatureSpecDto> specs,
             List<SetupSnapshotDto> snapshots,
-            Map<String, List<WarningDto>> screenIdToWarnings
+            Map<String, List<WarningDto>> screenIdToWarnings,
+            List<WarningDto> sprintWarnings
     ) {
-        return new SetupNotionDto(sprint, figmaFileKey, List.copyOf(specs), List.copyOf(snapshots), Map.copyOf(screenIdToWarnings));
+        return new SetupNotionDto(sprint, figmaFileKey, List.copyOf(specs), List.copyOf(snapshots), Map.copyOf(screenIdToWarnings), List.copyOf(sprintWarnings));
     }
 
     public List<WarningDto> warningsOf(String screenId) {

@@ -43,17 +43,17 @@ class OpenApiClientIntegrationTest {
     class 수집 {
 
         @Test
-        void 문서를_받아_지정한_operationId만_추출한다() {
+        void 문서를_받아_지정한_관련_API만_추출한다() {
             // given
             externalApiStubServer.stub("GET", OPENAPI_PATH, json(200, API_DOCS));
 
             // when
             OpenApiDocumentDto apiDocs = openApiClient.fetchApiDocs();
-            OpenApiExcerptDto excerpt = openApiClient.extract(apiDocs, List.of("getVersion"));
+            OpenApiExcerptDto excerpt = openApiClient.extract(apiDocs, List.of("GET /api/v1/version"));
 
             // then
             assertThat(apiDocs.rawJson()).contains("\"openapi\"");
-            assertThat(excerpt.foundOperationIds()).containsExactly("getVersion");
+            assertThat(excerpt.foundApis()).containsExactly("GET /api/v1/version");
             assertThat(externalApiStubServer.requests().getFirst().header("Accept")).isEqualTo("application/json");
         }
     }

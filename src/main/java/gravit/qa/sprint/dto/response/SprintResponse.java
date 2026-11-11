@@ -55,6 +55,12 @@ public record SprintResponse(
         @Schema(description = "마지막 셋업 작업 ID")
         Long latestSetupJobId,
 
+        @Schema(
+                description = "스프린트 경고. 준비 중 읽지 못한 기능 명세(SPEC_READ_FAILED), 종료 시 Notion 기록 실패(NOTION_WRITE_FAILED)",
+                requiredMode = Schema.RequiredMode.REQUIRED
+        )
+        List<WarningResponse> warnings,
+
         @Schema(description = "준비 완료 시각")
         OffsetDateTime preparedAt,
 
@@ -99,6 +105,7 @@ public record SprintResponse(
                 sprint.figmaFileKey(),
                 baseline,
                 latestSetupJobId,
+                sprint.warnings().stream().map(WarningResponse::from).toList(),
                 KstTimes.toOffset(sprint.preparedAt()),
                 KstTimes.toOffset(sprint.confirmedAt()),
                 KstTimes.toOffset(sprint.closedAt()),

@@ -12,7 +12,7 @@ public record FeatureUpsertDto(
         List<Part> parts,
         String notionPageId,
         SpecStatus specStatus,
-        List<String> relatedOperationIds
+        List<String> relatedApis
 ) {
 
     public static FeatureUpsertDto of(
@@ -22,8 +22,8 @@ public record FeatureUpsertDto(
             List<Part> parts,
             String notionPageId,
             SpecStatus specStatus,
-            List<String> relatedOperationIds
+            List<String> relatedApis
     ) {
-        return new FeatureUpsertDto(screenId, name, route, parts, notionPageId, specStatus, relatedOperationIds);
+        return new FeatureUpsertDto(screenId, name, route, parts, notionPageId, specStatus, relatedApis);
     }
 }

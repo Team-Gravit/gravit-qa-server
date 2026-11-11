@@ -10,6 +10,16 @@ import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.List;
 
+import static gravit.qa.adapter.notion.fixture.NotionSpecPageFixture.글자;
+import static gravit.qa.adapter.notion.fixture.NotionSpecPageFixture.링크;
+import static gravit.qa.adapter.notion.fixture.NotionSpecPageFixture.목록;
+import static gravit.qa.adapter.notion.fixture.NotionSpecPageFixture.문단;
+import static gravit.qa.adapter.notion.fixture.NotionSpecPageFixture.본문_응답;
+import static gravit.qa.adapter.notion.fixture.NotionSpecPageFixture.코드;
+import static gravit.qa.adapter.notion.fixture.NotionSpecPageFixture.표_블록;
+import static gravit.qa.adapter.notion.fixture.NotionSpecPageFixture.행;
+import static gravit.qa.adapter.notion.fixture.NotionSpecPageFixture.행_응답;
+import static gravit.qa.adapter.notion.fixture.NotionSpecPageFixture.헤더_행;
 import static gravit.qa.support.HttpStubServer.StubResponse.bytes;
 import static gravit.qa.support.HttpStubServer.StubResponse.json;
 
@@ -18,6 +28,10 @@ public final class SetupStubFixture {
     public static final String SPRINT_PAGE_ID = "11111111111111111111111111111111";
     public static final String LRN_PAGE_ID = "22222222222222222222222222222222";
     public static final String MY_PAGE_ID = "33333333333333333333333333333333";
+    public static final String LRN_TABLE_ID = "2222aaaa2222aaaa2222aaaa2222aaaa";
+    public static final String MY_TABLE_ID = "3333aaaa3333aaaa3333aaaa3333aaaa";
+    public static final String LRN_BODY_TEXT = "진입하면 유닛 목록을 보여준다";
+    public static final List<String> LRN_APIS = List.of("GET /api/v1/units/{unitId}", "GET /api/v1/missions");
     public static final String SPRINT_KEY = "3rd Agile";
     public static final String FILE_KEY = "AbC123";
     public static final String FIGMA_URL = "https://www.figma.com/design/" + FILE_KEY + "/Gravit?node-id=1-1";
@@ -35,6 +49,9 @@ public final class SetupStubFixture {
     private static final String FIGMA_NODES_PATH = "/v1/files/" + FILE_KEY + "/nodes";
     private static final String FIGMA_IMAGES_PATH = "/v1/images/" + FILE_KEY;
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final String EMPTY_VALUE = "-";
+    private static final String PART_DELIMITER = ", ";
+    private static final String FIGMA_FRAME_URL = "https://www.figma.com/design/" + FILE_KEY + "/?node-id=4-2";
     private static final String QA_PAGE_NODES = """
             {"nodes": {"1:1": {"document": {"id": "1:1", "name": "QA", "type": "CANVAS", "children": [
               {"id": "3:0", "name": "3rd Agile", "type": "SECTION", "children": [
@@ -80,10 +97,12 @@ public final class SetupStubFixture {
             String sprintPage
     ) {
         server.stub("GET", SPRINT_PATH, json(200, sprintPage));
-        server.stub("GET", "/v1/pages/" + LRN_PAGE_ID, json(200, 명세_페이지(LRN_PAGE_ID, "LRN-02", List.of("서버", "웹"), "확정", "getUnit, getMissing")));
-        server.stub("GET", "/v1/pages/" + MY_PAGE_ID, json(200, 명세_페이지(MY_PAGE_ID, "MY-04", List.of("웹"), "확인 필요", "")));
-        server.stub("GET", "/v1/blocks/" + LRN_PAGE_ID + "/children", json(200, 본문("진입하면 유닛 목록을 보여준다")));
-        server.stub("GET", "/v1/blocks/" + MY_PAGE_ID + "/children", json(200, 본문("팔로우 목록을 보여준다")));
+        server.stub("GET", "/v1/pages/" + LRN_PAGE_ID, json(200, 명세_페이지(LRN_PAGE_ID, "LRN-02")));
+        server.stub("GET", "/v1/pages/" + MY_PAGE_ID, json(200, 명세_페이지(MY_PAGE_ID, "MY-04")));
+        server.stub("GET", "/v1/blocks/" + LRN_PAGE_ID + "/children", json(200, 명세_본문(LRN_TABLE_ID, LRN_BODY_TEXT)));
+        server.stub("GET", "/v1/blocks/" + MY_PAGE_ID + "/children", json(200, 명세_본문(MY_TABLE_ID, "팔로우 목록을 보여준다")));
+        server.stub("GET", "/v1/blocks/" + LRN_TABLE_ID + "/children", json(200, 기본_정보_표("확정", List.of("서버", "웹"), "/learning/units/$unitId", LRN_APIS)));
+        server.stub("GET", "/v1/blocks/" + MY_TABLE_ID + "/children", json(200, 기본_정보_표("확인 필요", List.of("웹"), null, List.of())));
     }
 
     public static void Figma_응답_등록(HttpStubServer server) {
@@ -147,26 +166,46 @@ public final class SetupStubFixture {
 
     public static String 명세_페이지(
             String pageId,
-            String screenId,
-            List<String> partLabels,
-            String specStatusLabel,
-            String relatedApi
+            String screenId
     ) {
-        String parts = String.join(", ", partLabels.stream().map(label -> "{\"name\": \"" + label + "\"}").toList());
         return """
                 {"object": "page", "id": "%s",
                  "parent": {"type": "database_id", "database_id": "%s"},
                  "properties": {
                    "화면 ID": {"id": "title", "type": "title", "title": [{"plain_text": "%s"}]},
-                   "이름": {"id": "n", "type": "rich_text", "rich_text": [{"plain_text": "%s 화면"}]},
-                   "파트": {"id": "p", "type": "multi_select", "multi_select": [%s]},
-                   "라우트": {"id": "r", "type": "rich_text", "rich_text": [{"plain_text": "/%s"}]},
-                   "관련 API": {"id": "a", "type": "rich_text", "rich_text": [{"plain_text": "%s"}]},
-                   "Figma": {"id": "f", "type": "url", "url": null},
-                   "명세 상태": {"id": "s", "type": "select", "select": {"name": "%s"}},
-                   "최종 검증일": {"id": "d", "type": "date", "date": null}
+                   "화면 이름": {"id": "n", "type": "rich_text", "rich_text": [{"plain_text": "%s 화면"}]},
+                   "최종 검증일": {"id": "d", "type": "date", "date": null},
+                   "스프린트": {"id": "PlQ-ZA", "type": "relation", "relation": [{"id": "%s"}], "has_more": false}
                  }}
-                """.formatted(pageId, SPEC_DB, screenId, screenId, parts, screenId.toLowerCase(), relatedApi, specStatusLabel);
+                """.formatted(pageId, SPEC_DB, screenId, screenId, SPRINT_PAGE_ID);
+    }
+
+    public static String 명세_본문(
+            String tableId,
+            String text
+    ) {
+        return 본문_응답(표_블록(tableId), 문단("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", 글자(text)));
+    }
+
+    public static String 표_없는_명세_본문(String text) {
+        return 본문_응답(문단("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", 글자(text)));
+    }
+
+    public static String 기본_정보_표(
+            String specStatusLabel,
+            List<String> partLabels,
+            String route,
+            List<String> apis
+    ) {
+        return 행_응답(
+                헤더_행(),
+                행("명세 상태", 글자(specStatusLabel)),
+                행("파트", 글자(String.join(PART_DELIMITER, partLabels))),
+                행("라우트", route == null ? 글자(EMPTY_VALUE) : 코드(route)),
+                행("관련 API", apis.isEmpty() ? new ObjectNode[]{글자(EMPTY_VALUE)} : 목록(apis.toArray(String[]::new))),
+                행("Figma", 링크("LRN-02", FIGMA_FRAME_URL)),
+                행("FE 스펙 ID", 글자(EMPTY_VALUE))
+        );
     }
 
     public static StubResponse LLM_응답(String content) {
@@ -233,13 +272,6 @@ public final class SetupStubFixture {
         return OBJECT_MAPPER.createObjectNode()
                 .put("reason", met ? "근거 있음" : "관찰 불가")
                 .put("met", met);
-    }
-
-    private static String 본문(String text) {
-        return """
-                {"results": [{"object": "block", "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "type": "paragraph", "has_children": false,
-                  "paragraph": {"rich_text": [{"plain_text": "%s"}]}}], "has_more": false, "next_cursor": null}
-                """.formatted(text);
     }
 
     private static String 브랜치(String sha) {

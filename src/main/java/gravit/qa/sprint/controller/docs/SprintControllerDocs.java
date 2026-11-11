@@ -72,7 +72,7 @@ public interface SprintControllerDocs {
 
     @Operation(
             summary = "스프린트 상세(기준점 포함)",
-            description = "🔐 <strong>관리자 토큰 필요</strong><br>화면 안내(guide)와 파트별 진행률을 함께 내려준다"
+            description = "🔐 <strong>관리자 토큰 필요</strong><br>화면 안내(guide), 파트별 진행률, 스프린트 경고(warnings)를 함께 내려준다"
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "✅ 스프린트 조회 성공"),

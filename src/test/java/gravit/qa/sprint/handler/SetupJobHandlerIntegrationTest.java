@@ -1,5 +1,6 @@
 package gravit.qa.sprint.handler;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import gravit.qa.checklist.domain.CellState;
 import gravit.qa.checklist.domain.ChecklistItem;
 import gravit.qa.checklist.domain.Classification;
@@ -29,13 +30,17 @@ import gravit.qa.sprint.domain.GuideBlockerCode;
 import gravit.qa.sprint.domain.PrepareFailureReason;
 import gravit.qa.sprint.domain.Sprint;
 import gravit.qa.sprint.domain.SprintStatus;
+import gravit.qa.sprint.domain.WarningCode;
+import gravit.qa.sprint.dto.internal.WarningDto;
 import gravit.qa.sprint.dto.response.BaselineRepoResponse;
 import gravit.qa.sprint.dto.response.GuideBlockerResponse;
 import gravit.qa.sprint.dto.response.SprintResponse;
+import gravit.qa.sprint.dto.response.WarningResponse;
 import gravit.qa.sprint.facade.SetupFacade;
 import gravit.qa.sprint.facade.SprintFacade;
 import gravit.qa.sprint.fixture.SprintFixture;
 import gravit.qa.sprint.repository.SprintRepository;
+import gravit.qa.sprint.service.SprintCommandService;
 import gravit.qa.support.HttpStubServer;
 import gravit.qa.support.QaSpringBootTest;
 import gravit.qa.support.TestClock;
@@ -61,15 +66,20 @@ import static gravit.qa.sprint.fixture.SetupStubFixture.AOS_SHA;
 import static gravit.qa.sprint.fixture.SetupStubFixture.COMPLETIONS_PATH;
 import static gravit.qa.sprint.fixture.SetupStubFixture.FIGMA_URL;
 import static gravit.qa.sprint.fixture.SetupStubFixture.LLM_응답;
+import static gravit.qa.sprint.fixture.SetupStubFixture.LRN_APIS;
+import static gravit.qa.sprint.fixture.SetupStubFixture.LRN_BODY_TEXT;
 import static gravit.qa.sprint.fixture.SetupStubFixture.LRN_PAGE_ID;
+import static gravit.qa.sprint.fixture.SetupStubFixture.LRN_TABLE_ID;
 import static gravit.qa.sprint.fixture.SetupStubFixture.MY_PAGE_ID;
 import static gravit.qa.sprint.fixture.SetupStubFixture.SERVER_SHA;
 import static gravit.qa.sprint.fixture.SetupStubFixture.WEB_SHA;
-import static gravit.qa.sprint.fixture.SetupStubFixture.명세_페이지;
+import static gravit.qa.sprint.fixture.SetupStubFixture.기본_정보_표;
+import static gravit.qa.sprint.fixture.SetupStubFixture.명세_본문;
 import static gravit.qa.sprint.fixture.SetupStubFixture.비교_응답_등록;
 import static gravit.qa.sprint.fixture.SetupStubFixture.스프린트_페이지;
 import static gravit.qa.sprint.fixture.SetupStubFixture.외부_응답_등록;
 import static gravit.qa.sprint.fixture.SetupStubFixture.초안;
+import static gravit.qa.sprint.fixture.SetupStubFixture.표_없는_명세_본문;
 import static gravit.qa.sprint.fixture.SetupStubFixture.항목;
 import static gravit.qa.support.HttpStubServer.StubResponse.json;
 import static gravit.qa.support.HttpStubServer.StubResponse.status;
@@ -104,6 +114,9 @@ class SetupJobHandlerIntegrationTest {
     private JobQueryService jobQueryService;
 
     @Autowired
+    private SprintCommandService sprintCommandService;
+
+    @Autowired
     private SprintRepository sprintRepository;
 
     @Autowired
@@ -123,6 +136,9 @@ class SetupJobHandlerIntegrationTest {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private ObjectMapper objectMapper;
 
     private long sprintId;
 
@@ -166,6 +182,7 @@ class SetupJobHandlerIntegrationTest {
                 softly.assertThat(sprint.status()).isEqualTo(SprintStatus.REVIEW);
                 softly.assertThat(sprint.preparedAt()).isNotNull();
                 softly.assertThat(sprint.latestSetupJobId()).isEqualTo(jobId);
+                softly.assertThat(sprint.warnings()).isEmpty();
                 softly.assertThat(sprint.guide().nextAction()).isEqualTo(GuideAction.REVIEW_ITEMS);
                 softly.assertThat(sprint.guide().blockers())
                         .containsExactly(GuideBlockerResponse.of(GuideBlockerCode.PROPOSED_ITEMS_REMAINING, 3L, null));
@@ -258,6 +275,57 @@ class SetupJobHandlerIntegrationTest {
                 softly.assertThat(my.items().getFirst().expected())
                         .startsWith("근거 없음(명세 확인 필요) - 근거 없음(Figma WEB 프레임 없음) - ");
                 softly.assertThat(기능(checklist, "LRN-02").warnings()).containsExactly("OPENAPI_OPERATION_MISSING");
+            });
+        }
+
+        @Test
+        void 기본_정보_표의_관련_API를_메서드_URI_목록으로_저장하고_없는_API를_경고에_적는다() {
+            // given
+            setupFacade.startSetup(sprintId);
+
+            // when
+            jobRunner.runNext();
+
+            // then
+            Map<String, Object> lrn = jdbcTemplate.queryForMap(
+                    "SELECT name, route, parts::text AS parts, spec_status, array_to_string(related_apis, '|') AS apis FROM feature WHERE screen_id = 'LRN-02'");
+            String missingMessage = jdbcTemplate.queryForObject("""
+                    SELECT w ->> 'message'
+                    FROM sprint_feature sf
+                             JOIN feature f ON f.id = sf.feature_id
+                             CROSS JOIN LATERAL jsonb_array_elements(sf.warnings) w
+                    WHERE f.screen_id = 'LRN-02' AND w ->> 'code' = 'OPENAPI_OPERATION_MISSING'
+                    """, String.class);
+            assertSoftly(softly -> {
+                softly.assertThat(lrn.get("name")).isEqualTo("LRN-02 화면");
+                softly.assertThat(lrn.get("route")).isEqualTo("/learning/units/$unitId");
+                softly.assertThat(lrn.get("parts")).isEqualTo("{SERVER,WEB}");
+                softly.assertThat(lrn.get("spec_status")).isEqualTo("CONFIRMED");
+                softly.assertThat(lrn.get("apis")).isEqualTo(String.join("|", LRN_APIS));
+                softly.assertThat(missingMessage).isEqualTo("dev OpenAPI에 없는 관련 API: GET /api/v1/missions");
+                softly.assertThat(jdbcTemplate.queryForObject("SELECT route FROM feature WHERE screen_id = 'MY-04'", String.class)).isNull();
+            });
+        }
+
+        @Test
+        void LLM_입력에는_기본_정보_표를_빼고_관련_API를_기능_속성으로_넣는다() throws Exception {
+            // given
+            setupFacade.startSetup(sprintId);
+
+            // when
+            jobRunner.runNext();
+
+            // then
+            String userPrompt = 사용자_프롬프트(0);
+            String noRouteUserPrompt = 사용자_프롬프트(1);
+            assertSoftly(softly -> {
+                softly.assertThat(userPrompt).contains(
+                        "- 라우트: /learning/units/$unitId",
+                        "- 관련 API: GET /api/v1/units/{unitId}, GET /api/v1/missions",
+                        "## 기능 명세 본문\n" + LRN_BODY_TEXT
+                );
+                softly.assertThat(userPrompt).doesNotContain("| 명세 상태 |", "| 항목 | 값 |", "node-id=4-2");
+                softly.assertThat(noRouteUserPrompt).contains("- 라우트: (없음)", "- 관련 API: (없음)");
             });
         }
 
@@ -443,22 +511,6 @@ class SetupJobHandlerIntegrationTest {
         }
 
         @Test
-        void 모르는_파트_라벨이면_라벨_원문을_남기고_재시도_없이_실패한다() {
-            // given
-            externalApiStubServer.stub("GET", "/v1/pages/" + LRN_PAGE_ID, json(200,
-                    명세_페이지(LRN_PAGE_ID, "LRN-02", List.of("모바일"), "확정", "")));
-
-            // when
-            JobResponse job = 실행();
-
-            // then
-            assertSoftly(softly -> {
-                softly.assertThat(job.status()).isEqualTo(JobStatus.FAILED);
-                softly.assertThat(job.lastError()).contains("'모바일'", "LRN-02");
-            });
-        }
-
-        @Test
         void Figma_QA_페이지가_비어_있으면_FIGMA_단계에서_재시도_없이_실패한다() {
             // given
             externalApiStubServer.stub("GET", "/v1/pages/11111111111111111111111111111111", json(200, 스프린트_페이지(List.of(LRN_PAGE_ID, MY_PAGE_ID), null)));
@@ -478,6 +530,119 @@ class SetupJobHandlerIntegrationTest {
             long jobId = setupFacade.startSetup(sprintId).id();
             jobRunner.runNext();
             return jobQueryService.getJob(jobId);
+        }
+    }
+
+    @Nested
+    @DisplayName("기능 명세의 기본 정보 표를 읽지 못하면")
+    class 명세_읽기_실패 {
+
+        @Test
+        void 표가_없는_명세만_빼고_나머지로_준비하며_스프린트_경고를_남긴다() {
+            // given
+            externalApiStubServer.stub("GET", "/v1/blocks/" + LRN_PAGE_ID + "/children", json(200, 표_없는_명세_본문(LRN_BODY_TEXT)));
+            externalApiStubServer.stub("POST", COMPLETIONS_PATH, LLM_응답(WEB_ONLY_OUTPUT));
+            long jobId = setupFacade.startSetup(sprintId).id();
+
+            // when
+            jobRunner.runNext();
+
+            // then
+            SprintResponse sprint = sprintFacade.getSprint(sprintId);
+            assertSoftly(softly -> {
+                softly.assertThat(jobQueryService.getJob(jobId).status()).isEqualTo(JobStatus.SUCCEEDED);
+                softly.assertThat(sprint.status()).isEqualTo(SprintStatus.REVIEW);
+                softly.assertThat(sprint.warnings()).containsExactly(
+                        new WarningResponse(WarningCode.SPEC_READ_FAILED, "LRN-02: 본문 첫 블록이 기본 정보 표가 아닙니다"));
+                softly.assertThat(checklistFacade.getChecklist(sprintId).features())
+                        .extracting(feature -> feature.feature().screenId())
+                        .containsExactly("MY-04");
+                softly.assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM feature WHERE screen_id = 'LRN-02'", Long.class)).isZero();
+                softly.assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM snapshot WHERE job_id = ? AND source = 'NOTION_SPEC'", Long.class, jobId)).isEqualTo(2L);
+                softly.assertThat(externalApiStubServer.requests("POST", COMPLETIONS_PATH)).hasSize(1);
+            });
+        }
+
+        @Test
+        void 모르는_파트_라벨도_그_명세만_빼고_라벨_원문을_경고에_남긴다() {
+            // given
+            externalApiStubServer.stub("GET", "/v1/blocks/" + LRN_TABLE_ID + "/children", json(200, 기본_정보_표("확정", List.of("모바일"), null, List.of())));
+            externalApiStubServer.stub("POST", COMPLETIONS_PATH, LLM_응답(WEB_ONLY_OUTPUT));
+            long jobId = setupFacade.startSetup(sprintId).id();
+
+            // when
+            jobRunner.runNext();
+
+            // then
+            assertSoftly(softly -> {
+                softly.assertThat(jobQueryService.getJob(jobId).status()).isEqualTo(JobStatus.SUCCEEDED);
+                softly.assertThat(sprintFacade.getSprint(sprintId).warnings()).containsExactly(
+                        new WarningResponse(WarningCode.SPEC_READ_FAILED, "LRN-02: 알 수 없는 파트 라벨 '모바일'"));
+            });
+        }
+
+        @Test
+        void 명세_상태가_비어_있어도_그_명세만_뺀다() {
+            // given
+            externalApiStubServer.stub("GET", "/v1/blocks/" + LRN_TABLE_ID + "/children", json(200, 기본_정보_표("-", List.of("서버"), null, List.of())));
+            externalApiStubServer.stub("POST", COMPLETIONS_PATH, LLM_응답(WEB_ONLY_OUTPUT));
+            setupFacade.startSetup(sprintId);
+
+            // when
+            jobRunner.runNext();
+
+            // then
+            assertThat(sprintFacade.getSprint(sprintId).warnings()).containsExactly(
+                    new WarningResponse(WarningCode.SPEC_READ_FAILED, "LRN-02: 기본 정보 표에 '명세 상태' 값이 없습니다"));
+        }
+
+        @Test
+        void 읽은_명세가_하나도_없으면_재시도_없이_실패한다() {
+            // given
+            externalApiStubServer.stub("GET", "/v1/blocks/" + LRN_PAGE_ID + "/children", json(200, 표_없는_명세_본문("유닛")));
+            externalApiStubServer.stub("GET", "/v1/blocks/" + MY_PAGE_ID + "/children", json(200, 표_없는_명세_본문("팔로우")));
+            long jobId = setupFacade.startSetup(sprintId).id();
+
+            // when
+            jobRunner.runNext();
+
+            // then
+            JobResponse job = jobQueryService.getJob(jobId);
+            assertSoftly(softly -> {
+                softly.assertThat(job.status()).isEqualTo(JobStatus.FAILED);
+                softly.assertThat(job.attempt()).isEqualTo(1);
+                softly.assertThat(job.steps().get(1).status()).isEqualTo(JobStepStatus.FAILED);
+                softly.assertThat(job.lastError()).contains("읽을 수 있는 대상 기능 명세가 없습니다", "LRN-02", "MY-04");
+                softly.assertThat(sprintFacade.getSprint(sprintId).status()).isEqualTo(SprintStatus.PREPARE_FAILED);
+                softly.assertThat(sprintFacade.getSprint(sprintId).warnings()).isEmpty();
+            });
+        }
+
+        @Test
+        void 다시_준비해_성공하면_이전_SPEC_READ_FAILED만_지우고_다른_스프린트_경고는_둔다() {
+            // given
+            externalApiStubServer.stub("GET", "/v1/blocks/" + LRN_PAGE_ID + "/children", json(200, 표_없는_명세_본문(LRN_BODY_TEXT)));
+            externalApiStubServer.stub("POST", COMPLETIONS_PATH, LLM_응답(WEB_ONLY_OUTPUT));
+            setupFacade.startSetup(sprintId);
+            jobRunner.runNext();
+            sprintCommandService.addWarning(sprintId, WarningDto.of(WarningCode.NOTION_WRITE_FAILED, "이전 기록 실패"));
+
+            // when
+            externalApiStubServer.stub("GET", "/v1/blocks/" + LRN_PAGE_ID + "/children", json(200, 명세_본문(LRN_TABLE_ID, LRN_BODY_TEXT)));
+            externalApiStubServer.stub("POST", COMPLETIONS_PATH, LLM_응답(VALID_OUTPUT), LLM_응답(WEB_ONLY_OUTPUT));
+            setupFacade.startSetup(sprintId);
+            jobRunner.runNext();
+
+            // then
+            SprintResponse sprint = sprintFacade.getSprint(sprintId);
+            assertSoftly(softly -> {
+                softly.assertThat(sprint.status()).isEqualTo(SprintStatus.REVIEW);
+                softly.assertThat(sprint.warnings()).containsExactly(
+                        new WarningResponse(WarningCode.NOTION_WRITE_FAILED, "이전 기록 실패"));
+                softly.assertThat(checklistFacade.getChecklist(sprintId).features())
+                        .extracting(feature -> feature.feature().screenId())
+                        .containsExactlyInAnyOrder("LRN-02", "MY-04");
+            });
         }
     }
 
@@ -616,6 +781,11 @@ class SetupJobHandlerIntegrationTest {
                 softly.assertThat(sprintFacade.getSprint(sprintId).status()).isEqualTo(SprintStatus.PREPARING);
             });
         }
+    }
+
+    private String 사용자_프롬프트(int requestIndex) throws Exception {
+        String body = externalApiStubServer.requests("POST", COMPLETIONS_PATH).get(requestIndex).body();
+        return objectMapper.readTree(body).at("/messages/1/content").asText();
     }
 
     private static ChecklistFeatureResponse 기능(

@@ -365,7 +365,7 @@
 - [ ] 6. 체크리스트와 경고
 
   ```bash
-  api "$BASE/api/v1/sprints/$SPRINT_ID" | jq '{status, latestSetupJobId}'
+  api "$BASE/api/v1/sprints/$SPRINT_ID" | jq '{status, latestSetupJobId, warnings}'
   api "$BASE/api/v1/sprints/$SPRINT_ID/checklist" > checklist.json
   jq '.features | length' < checklist.json
   jq -r '.features[] | select(.warnings | length > 0) | "\(.feature.screenId)\t\(.warnings | join(","))"' < checklist.json
@@ -373,13 +373,15 @@
 
   기대: 스프린트 `status`가 `"REVIEW"`, 기능 수 `53`, 이어서 경고가 있는 기능마다 `화면ID<탭>경고 코드들`.
 
+  스프린트 `warnings`에 `SPEC_READ_FAILED`가 있으면 그 명세는 기본 정보 표를 읽지 못해 이번 준비에서 빠진 것이다(기능 수도 그만큼 준다). 메시지의 화면 ID 페이지에서 본문 첫 표를 고친 뒤 5단계부터 다시 준비한다.
+
 - [ ] 6-a. Notion `관련 API` 정정 대상: `OPENAPI_OPERATION_MISSING`이 붙은 화면 ID
 
   ```bash
   jq -r '.features[] | select(.warnings | any(. == "OPENAPI_OPERATION_MISSING")) | .feature.screenId' < checklist.json | sort -u
   ```
 
-  API는 경고 코드만 내려 준다. 없는 operationId까지 보려면 1단계와 같은 방식으로 QA 계정 psql에 접속해 조회한다.
+  API는 경고 코드만 내려 준다. 없는 관련 API까지 보려면 1단계와 같은 방식으로 QA 계정 psql에 접속해 조회한다.
 
   ```sql
   SELECT f.screen_id, w ->> 'message' AS detail

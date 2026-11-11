@@ -45,12 +45,16 @@ class OpenApiExtractorTest {
             """;
 
     @Test
-    void 지정한_operationId의_경로와_참조_스키마만_추출한다() throws Exception {
+    void 메서드와_경로가_같은_API의_경로와_참조_스키마만_추출한다() throws Exception {
         // given
         JsonNode document = OBJECT_MAPPER.readTree(DOCUMENT);
 
         // when
-        OpenApiExcerptDto result = OpenApiExtractor.extract(document, List.of("getUnit", "submitLesson", "notExists"));
+        OpenApiExcerptDto result = OpenApiExtractor.extract(document, List.of(
+                "GET /api/v1/units/{unitId}",
+                "POST /api/v1/lessons",
+                "GET /api/v1/not-exists"
+        ));
 
         // then
         JsonNode excerpt = result.excerpt();
@@ -64,8 +68,30 @@ class OpenApiExtractorTest {
             softly.assertThat(excerpt.at("/components/schemas").has("LessonSummary")).isTrue();
             softly.assertThat(excerpt.at("/components/schemas").has("Lesson/Request")).isTrue();
             softly.assertThat(excerpt.at("/components/schemas").has("Unrelated")).isFalse();
-            softly.assertThat(result.foundOperationIds()).containsExactly("getUnit", "submitLesson");
-            softly.assertThat(result.missingOperationIds()).containsExactly("notExists");
+            softly.assertThat(result.foundApis()).containsExactly("GET /api/v1/units/{unitId}", "POST /api/v1/lessons");
+            softly.assertThat(result.missingApis()).containsExactly("GET /api/v1/not-exists");
+        });
+    }
+
+    @Test
+    void 메서드가_다르거나_경로_변수_이름이_다르거나_형식이_틀린_줄은_없는_API로_남긴다() throws Exception {
+        // given
+        JsonNode document = OBJECT_MAPPER.readTree(DOCUMENT);
+        List<String> apis = List.of(
+                "PUT /api/v1/units/{unitId}",
+                "GET /api/v1/units/{id}",
+                "get /api/v1/units/{unitId}",
+                "getUnit"
+        );
+
+        // when
+        OpenApiExcerptDto result = OpenApiExtractor.extract(document, apis);
+
+        // then
+        assertSoftly(softly -> {
+            softly.assertThat(result.foundApis()).isEmpty();
+            softly.assertThat(result.missingApis()).containsExactlyElementsOf(apis);
+            softly.assertThat(result.excerpt().path("paths").isEmpty()).isTrue();
         });
     }
 }

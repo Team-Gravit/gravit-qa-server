@@ -41,12 +41,7 @@ public class NotionClient {
     public static final String SPRINT_CHANGE_SUMMARY = "변경 요약";
     public static final String SPRINT_FIGMA_QA_PAGE = "Figma QA 페이지";
     public static final String SPEC_SCREEN_ID = "화면 ID";
-    public static final String SPEC_NAME = "이름";
-    public static final String SPEC_PARTS = "파트";
-    public static final String SPEC_ROUTE = "라우트";
-    public static final String SPEC_RELATED_API = "관련 API";
-    public static final String SPEC_FIGMA = "Figma";
-    public static final String SPEC_STATUS = "명세 상태";
+    public static final String SPEC_NAME = "화면 이름";
     public static final String SPEC_LAST_VERIFIED_AT = "최종 검증일";
 
     private static final String VERSION_HEADER = "Notion-Version";
@@ -193,11 +188,6 @@ public class NotionClient {
                 pageId,
                 screenId.trim(),
                 NotionPropertyReader.text(properties.path(SPEC_NAME)),
-                NotionPropertyReader.multiSelect(properties.path(SPEC_PARTS)),
-                NotionPropertyReader.text(properties.path(SPEC_ROUTE)),
-                NotionPropertyReader.text(properties.path(SPEC_RELATED_API)),
-                NotionPropertyReader.url(properties.path(SPEC_FIGMA)),
-                NotionPropertyReader.select(properties.path(SPEC_STATUS)),
                 NotionPropertyReader.dateStart(properties.path(SPEC_LAST_VERIFIED_AT)),
                 page.toString()
         );

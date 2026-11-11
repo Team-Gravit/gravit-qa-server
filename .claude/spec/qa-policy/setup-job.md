@@ -16,23 +16,50 @@
 | # | 단계 | 처리 | 실패 |
 |---|---|---|---|
 | 1 | BASELINE | 3개 저장소 `release` HEAD SHA. 직전 **CLOSED** 스프린트(`closed_at` 최신) 기준점의 SHA를 `previous_commit_sha`로. `gravit-aos`는 `app/build.gradle.kts`에서 `versionCode`/`versionName`을 추출하고, 직전보다 크지 않으면 `version_code_warning` | 브랜치 없음(`ReleaseBranchNotFoundException`)은 재시도 없이 실패, 스프린트 `prepare_failure_reason = RELEASE_BRANCH_MISSING` |
-| 2 | NOTION | 스프린트 행(`NOTION_SPRINT`), `대상 기능` 명세 페이지마다 속성 + 본문(`NOTION_SPEC`). 라벨 변환(아래) | 대상 기능 0개, 파트 비어 있음, 명세 상태 비어 있음, 모르는 라벨, 화면 ID 중복은 재시도 없이 실패 |
+| 2 | NOTION | 스프린트 행(`NOTION_SPRINT`), `대상 기능` 명세 페이지마다 속성 + 본문(`NOTION_SPEC`). 본문 첫 기본 정보 표 읽기, 라벨 변환(아래) | 대상 기능 0개, 화면 ID 중복, 읽을 수 있는 명세 0개는 재시도 없이 실패. 기본 정보 표를 읽지 못한 명세(표 없음, 명세 상태나 파트 없음, 모르는 라벨)는 그 명세만 빼고 `SPEC_READ_FAILED` 스프린트 경고를 남긴 뒤 계속 |
 | 3 | FIGMA | `getQaFrames(fileKey, sprintKey)`. 기능 파트를 플랫폼으로 바꿔 화면을 찾고, 찾은 프레임만 PNG로 저장(`FIGMA_FRAME`) | Figma 파일 키 없음(Notion `Figma QA 페이지` 비어 있음)은 재시도 없이 실패. 프레임이 없는 기능은 실패가 아니라 `FIGMA_FRAME_MISSING` 경고 |
 | 4 | DIFF | 저장소별 `compare(previous, current)`. 변경 파일 목록을 `GITHUB_DIFF`로. 같은 SHA면 호출하지 않고 빈 목록 | 직전 기준점이 없으면 `SKIPPED`("직전 기준점 없음 - 전체 범위") |
-| 5 | OPENAPI | `/v3/api-docs` 1회(`OPENAPI`, 원문), 기능별 `관련 API` operationId만 발췌 | 문서에 없는 operationId는 `OPENAPI_OPERATION_MISSING` 경고 |
+| 5 | OPENAPI | `/v3/api-docs` 1회(`OPENAPI`, 원문), 기능별 `관련 API`(`메서드 URI`)와 메서드, 경로가 정확히 같은 operation만 발췌 | 문서에 없는 API는 `OPENAPI_OPERATION_MISSING` 경고 |
 | 6 | INTERPRET | 기능 1개당 `LlmClient.generate` 1회. 기능 사이마다 취소 요청 확인 | 출력 검증 3회 실패(`LlmOutputInvalidException`)는 그 기능만 "초안 생성 실패" 항목 1개 + `ITEM_GENERATION_FAILED`로 남기고 계속. `LlmRateLimitedException`, LLM 401/403은 재시도 없이 실패 |
 | 7 | VALIDATE | 의미 검증과 같은 규칙에 "AUTO면 testRef가 카탈로그에 있음"을 더해 재확인 | 어긋나면 재시도 없이 실패(결정적이라 재시도해도 같음) |
 | 8 | APPLY | 한 트랜잭션: 스프린트 `REVIEW`, `prepared_at`, Notion에서 다시 읽은 기간과 Figma 파일 키 반영 → 기준점 교체(행 유지, 저장소 행 재작성) → `feature` upsert → `sprint_feature` 교체 → `snapshot` 행 → 기존 `PROPOSED` 항목 삭제 후 새 항목, 셀 생성 | 스프린트가 `PREPARING`이 아니면 재시도 없이 실패 |
 
+## 기능 명세 기본 정보 표
+
+기능 명세 DB 속성은 `화면 ID`, `화면 이름`, `최종 검증일`만 읽는다(`스프린트` relation은 스프린트 쪽 `대상 기능`으로 따라간다). 나머지 값은 본문 첫 블록인 2열 표에서 읽는다(`NotionSpecTableParser`).
+
+- 본문 첫 블록이 `table`이 아니면 그 명세는 읽지 못한 것으로 본다. 다른 위치의 표는 찾지 않는다
+- 행은 첫 셀 텍스트(앞뒤 공백 제거)로 찾는다. 헤더 행(`항목 | 값`)과 모르는 행은 쓰지 않는다. 굵게, 인라인 코드 같은 서식은 무시한다
+- 셀 값은 rich_text 조각의 plain_text를 이어 붙인 뒤 앞뒤 공백을 지운다. 빈 값과 `-`는 빈 값이다
+
+| 항목 | 읽는 방법 | 빈 값일 때 | 쓰는 곳 |
+|---|---|---|---|
+| 명세 상태 | 값 그대로 | 그 명세 실패 | 라벨 변환(아래) |
+| 파트 | `,`로 나누고 앞뒤 공백 제거 | 그 명세 실패 | 라벨 변환(아래) |
+| 라우트 | 값 그대로(`/my, /my/summary`처럼 여러 개여도 문자열 하나) | null | `feature.route`, LLM 입력 |
+| 관련 API | 줄바꿈으로 나눔 → 줄 앞 `•`, `-`, 공백 제거 → 공백을 1칸으로 → 빈 줄, 중복 제외 | 빈 목록 | `feature.related_apis`, OpenAPI 발췌, LLM 입력 |
+| Figma | 셀 안 첫 링크의 URL | null | 저장하지 않음(스냅샷에만) |
+| FE 스펙 ID | `,`로 나눔 | 빈 목록 | 저장하지 않음(스냅샷에만) |
+
+- `관련 API` 한 줄은 `메서드 URI`(예: `GET /api/v1/problems/{lessonId}`)다. 형식을 검사하지 않고, OpenAPI에 같은 키가 없으면 `OPENAPI_OPERATION_MISSING`에 그대로 적힌다
+
 ## Notion 라벨 변환
 
-| 속성 | Notion 라벨 | 값 |
+| 표 항목 | Notion 라벨 | 값 |
 |---|---|---|
-| 기능 명세 `파트` | 서버 / 웹 / 앱 | `SERVER` / `WEB` / `APP` |
-| 기능 명세 `명세 상태` | 역문서화 초안 / 확인 필요 / 확정 | `DRAFT` / `NEEDS_CHECK` / `CONFIRMED` |
+| `파트` | 서버 / 웹 / 앱 | `SERVER` / `WEB` / `APP` |
+| `명세 상태` | 역문서화 초안 / 확인 필요 / 확정 | `DRAFT` / `NEEDS_CHECK` / `CONFIRMED` |
 
-- 앞뒤 공백만 무시하고 글자 그대로 비교한다. 모르는 라벨은 라벨 원문과 화면 ID를 메시지에 넣어 재시도 없이 실패한다
-- 기능 명세 `이름`이 비어 있으면 `feature.name`은 화면 ID로 둔다
+- 앞뒤 공백만 무시하고 글자 그대로 비교한다. 모르는 라벨은 라벨 원문을 사유에 넣어 그 명세만 실패로 처리한다
+- 기능 명세 `화면 이름`이 비어 있으면 `feature.name`은 화면 ID로 둔다
+
+## 읽지 못한 명세
+
+- 기본 정보 표 문제(표 없음, `명세 상태`나 `파트` 없음, 모르는 라벨)는 명세 1건의 문제라 그 명세만 이번 준비에서 뺀다. Figma, OpenAPI, LLM 단계와 `feature` upsert에 들어가지 않으므로 기존 `feature` 행은 그대로 남는다
+- `sprint.warnings`에 `SPEC_READ_FAILED`(`{화면 ID}: {사유}`)를 남긴다. 다시 준비가 성공하면 이전 `SPEC_READ_FAILED`를 모두 지우고 새로 넣는다(다른 스프린트 경고는 유지)
+- 읽지 못한 명세도 `NOTION_SPEC` 스냅샷은 남긴다(원인 확인용, 항목 `source_refs`에는 들어가지 않는다)
+- 대상 기능 전부를 읽지 못하면 준비할 것이 없으므로 재시도 없이 실패한다
+- 화면 ID 비어 있음과 중복은 그대로 작업 전체 실패다. 어느 행이 맞는지 정할 수 없는 정합성 문제라서다
 - `feature`는 `notion_page_id`로 찾고, 없으면 `screen_id`로 찾아(Notion 페이지 재생성) 갱신한다. 둘 다 없으면 새로 만든다
 
 ## 파트 → Figma 플랫폼
@@ -52,7 +79,7 @@
 | source | 파일 | `source_ref` | 기능 전용 |
 |---|---|---|---|
 | `NOTION_SPRINT` | `{pageId}.json` (페이지 원문) | 페이지 ID | 아니오 |
-| `NOTION_SPEC` | `{pageId}.json` (`{page, markdown, blocks}`) | 페이지 ID | 예 |
+| `NOTION_SPEC` | `{pageId}.json` (`{page, table, markdown, blocks}`. 읽지 못한 명세는 `table: null`, 전체 본문 `markdown`, `error`) | 페이지 ID | 예 |
 | `FIGMA_FRAME` | `{플랫폼}_{nodeId}.png` | node ID | 예 |
 | `GITHUB_DIFF` | `{repo}.json` (`[{filename, status, additions, deletions, previousFilename}]`) | `repo@prev..cur` | 아니오 |
 | `OPENAPI` | `api-docs.json` (원문) | OpenAPI URL | 아니오 |
@@ -65,10 +92,12 @@
 
 | 넣는 것 | 넣지 않는 것 |
 |---|---|
-| 기능 속성(화면 ID, 이름, 라우트, 파트, 명세 상태), 명세 본문 마크다운, Figma 화면별 프레임 수와 상태 목록, 스프린트 `변경 요약`, OpenAPI 발췌(JSON), 저장소별 변경 파일 `{status} {path}` | Figma 이미지, diff patch 본문 |
+| 기능 속성(화면 ID, 이름, 라우트, 파트, 명세 상태, 관련 API 목록), 명세 본문 마크다운(기본 정보 표를 뺀 블록), Figma 화면별 프레임 수와 상태 목록, 스프린트 `변경 요약`, OpenAPI 발췌(JSON), 저장소별 변경 파일 `{status} {path}` | Figma 이미지, diff patch 본문, 기본 정보 표의 Figma 링크와 FE 스펙 ID |
 
 - 시스템 프롬프트(`prompts/checklist-draft-system.txt`): 규칙, 기준 5개 정의, 페르소나 목록(`PersonaKey` 키와 설명), 그 화면의 테스트 카탈로그 항목
 - user 프롬프트(`prompts/checklist-draft-user.txt`)는 중요도 순으로 놓는다: 기능 속성 → 명세 본문 → Figma 상태 → 변경 요약 → OpenAPI 발췌 → 변경 파일
+- 기본 정보 표를 본문에서 빼는 이유: 같은 값이 기능 속성과 본문에 두 번 들어가 토큰이 늘고, `-`와 `(없음)`처럼 표기가 갈린다. 파싱 결과를 기능 속성의 단일 출처로 둔다
+- 본문 표 셀 안 줄바꿈은 `<br>`로 바꿔 마크다운 표 행이 깨지지 않게 한다
 - 상한 `qa.setup.max-prompt-chars`(기본 30000자, user 프롬프트 기준). 넘으면 뒤에서 자르고 `(입력 길이 상한으로 이후 내용 생략)`을 붙인 뒤 `LLM_INPUT_TRUNCATED` 경고. 시작값이며 C6 파일럿에서 다시 정한다
 - diff patch를 넣지 않는 이유: LLM 구독 한도를 면접 채점과 나눠 쓰고(C1-16), 토큰이 커진다. C6에서 다시 판단한다
 
@@ -125,12 +154,21 @@
 |---|---|
 | `SPEC_NEEDS_CHECK` | 명세 상태가 확인 필요 |
 | `FIGMA_FRAME_MISSING` | WEB/APP 파트인데 그 플랫폼 프레임 없음(플랫폼별 1개) |
-| `OPENAPI_OPERATION_MISSING` | `관련 API`의 operationId가 dev OpenAPI에 없음 (C4 추가) |
+| `OPENAPI_OPERATION_MISSING` | `관련 API`의 `메서드 URI`가 dev OpenAPI에 없음(형식이 틀린 줄 포함) (C4 추가, #15에서 operationId 기준을 바꿈) |
 | `LLM_INPUT_TRUNCATED` | 프롬프트가 상한을 넘어 잘림 (C4 추가) |
 | `ITEM_GENERATION_FAILED` | LLM 출력 검증 3회 실패 |
 
 - 추가한 2개는 `ChecklistFeature.warnings`(string 배열)에는 그대로 나간다. `ReportWarning.code` enum은 리포트 단계에서 넓혀야 한다
 - `versionCode` 미증가는 기능 경고가 아니라 `baseline_repo.version_code_warning`에 남는다
+
+## 스프린트 경고 (`sprint.warnings`)
+
+| 코드 | 남는 때 |
+|---|---|
+| `SPEC_READ_FAILED` | 준비 중 기본 정보 표를 읽지 못해 뺀 명세(명세마다 1개, 메시지 `{화면 ID}: {사유}`). 준비가 성공할 때마다 교체 (#15 추가) |
+| `NOTION_WRITE_FAILED` | 종료 시 Notion `QA 기준점` 기록 실패(`checklist.md`) |
+
+- `GET /sprints/{id}` 응답의 `warnings`로 내려간다
 
 ## 스프린트 상태 동기화
 
