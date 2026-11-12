@@ -39,14 +39,16 @@
 | MANUAL_REVIEW | 가능 | 가능 | 가능 |
 | CLOSED | 불가 | 불가 | 불가 |
 
-상태가 맞지 않으면 409 `SPRINT_4092`.
+상태가 맞지 않거나 실행 중인 작업이 있으면 409 `SPRINT_4092`. 디자인 항목의 행위, 설명 수정과 삭제는 MANUAL_REVIEW에서만 된다(`design-review.md`).
 
 ## 항목 편집
 
-- 사람이 추가한 항목: `origin = HUMAN`, `specRowIds` 없음. 스프린트 대상 기능이 아니면 404 `CHECKLIST_4042`
+- 사람이 추가한 항목: `origin = HUMAN`, `specRowIds` 없음, `classification = MANUAL` 고정. 스프린트 대상 기능이 아니면 404 `CHECKLIST_4042`
+  - 1차(AUTO)는 LLM 판정 대상인데 추가한 항목에는 1차 판정이 다시 돌지 않으므로 2차로 둔다
+  - 요청의 `classification`은 받되 무시한다(옛 admin 호환). 값이 AUTO여도 MANUAL로 저장한다
 - 수정은 전달한 필드만 바꾼다. 행위, 설명, 파트, 분류 중 하나라도 바뀌면 그 항목의 셀 중 판정이 있는 셀(NOT_APPLICABLE 제외)을 UNCHECKED, `source = MANUAL`로 되돌리고 이력 `reason = "항목 수정으로 판정 초기화"`
 - `parts` 변경: 빠진 파트는 NOT_APPLICABLE, 다시 들어온 파트는 UNCHECKED
-- 분류를 바꾸면 다른 차수 체크리스트로 옮겨진다. 1차 판정을 다시 돌리지는 않는다(사람이 확인)
+- 분류는 AUTO에서 MANUAL로만 바꿀 수 있다(MANUAL → AUTO는 400 `CHECKLIST_4002`, 같은 값은 변경 없음). 옮기면 2차 체크리스트에 나타나고 1차 판정을 다시 돌리지는 않는다(사람이 확인)
 - 삭제: `DELETE /checklist-items/{id}?version=` → 204. 셀과 셀 이력도 지워진다
 - 낙관적 잠금: `version`이 다르면 409 `GLOBAL_4091`
 
@@ -54,8 +56,9 @@
 
 - 상태 UNCHECKED, PASS, FAIL, NOT_APPLICABLE. 출처 AUTO(1차 판정), MANUAL(사람)
 - 변경 요청은 UNCHECKED, PASS, FAIL만(NOT_APPLICABLE은 400 `CHECKLIST_4001`). NOT_APPLICABLE 셀은 422 `CHECKLIST_4223`
-- 1차 판정 결과도 사람이 바꿀 수 있다. 사람이 바꾸면 `source = MANUAL`, `reason = null`
-- 바뀌면 `check_cell_history`(이전, 새 상태, 출처, 사유, 변경자, 시각). 1차 판정은 상태가 같아도 사유와 함께 이력을 남긴다
+- 1차 판정 결과도 사람이 바꿀 수 있다. 사람이 바꾸면 `source = MANUAL`, `reason = null`, `evidence = []`
+- `evidence`: 1차 판정 근거 코드 위치 `[{path, startLine, endLine}]`(`path`는 `{저장소}/{경로}`). 1차 판정만 채우고, 사람 변경과 판정 초기화는 빈 배열
+- 바뀌면 `check_cell_history`(이전, 새 상태, 출처, 사유, 근거, 변경자, 시각). 1차 판정은 상태가 같아도 사유와 근거를 함께 이력으로 남긴다
 - `editable` = MANUAL_REVIEW이고 NOT_APPLICABLE이 아님
 
 ## 진행도 (`progress[]`)
@@ -65,10 +68,10 @@
 | DESIGN | 디자인 검수 항목 |
 | WEB, APP, SERVER | 1차, 2차 체크 셀 합계 |
 
-- `total` = NOT_APPLICABLE을 뺀 수, `checked` = UNCHECKED가 아닌 수, `pass`, `fail`
+- `total` = NOT_APPLICABLE을 뺀 수, `checked` = PASS와 FAIL 수, `pass`, `fail`. 디자인 항목의 해당 없음(사람이 고름)과 체크 셀의 해당 없음(파트 제외)을 같은 규칙으로 뺀다
 
 ## 종료
 
 - MANUAL_REVIEW에서만(409 `SPRINT_4092`), 실행 중인 작업이 없을 때(409 `JOB_4091`), `version` 일치
-- 체크 셀(NOT_APPLICABLE 제외)과 디자인 항목의 UNCHECKED가 0이어야 한다(409 `SPRINT_4093`). FAIL은 허용
+- 체크 셀과 디자인 항목의 UNCHECKED가 0이어야 한다(409 `SPRINT_4093`). FAIL, NOT_APPLICABLE은 허용
 - Notion에 아무것도 쓰지 않는다
