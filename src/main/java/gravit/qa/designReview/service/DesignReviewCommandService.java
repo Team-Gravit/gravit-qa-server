@@ -1,5 +1,6 @@
 package gravit.qa.designReview.service;
 
+import gravit.qa.checklist.support.FailReasonPolicy;
 import gravit.qa.designReview.domain.DesignReviewItem;
 import gravit.qa.designReview.dto.internal.DesignReviewItemDraftDto;
 import gravit.qa.designReview.dto.request.DesignReviewItemUpdateRequest;
@@ -50,13 +51,15 @@ public class DesignReviewCommandService {
             DesignReviewStateUpdateRequest request,
             long adminId
     ) {
+        String reason = FailReasonPolicy.normalize(request.reason());
+
         DesignReviewItem item = findItem(itemId);
         item.requireVersion(request.version());
 
-        if (item.getState() != request.state()) {
-            designReviewItemHistoryRepository.save(item.change(request.state(), adminId, KstTimes.now(clock)));
+        item.change(request.state(), reason, adminId, KstTimes.now(clock)).ifPresent(history -> {
+            designReviewItemHistoryRepository.save(history);
             designReviewItemRepository.flush();
-        }
+        });
         return DesignReviewItemResponse.of(item, true);
     }
 
@@ -80,7 +83,7 @@ public class DesignReviewCommandService {
         }
 
         if (contentChanged) {
-            item.resetJudgment(EDIT_RESET_REASON, adminId, KstTimes.now(clock)).ifPresent(designReviewItemHistoryRepository::save);
+            designReviewItemHistoryRepository.save(item.resetJudgment(EDIT_RESET_REASON, adminId, KstTimes.now(clock)));
             designReviewItemRepository.flush();
         }
         return DesignReviewItemResponse.of(item, true);

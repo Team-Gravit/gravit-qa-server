@@ -144,6 +144,105 @@ class DesignReviewControllerIntegrationTest {
     }
 
     @Nested
+    @DisplayName("사람이 Fail 사유를 남길 때")
+    class Fail_사유 {
+
+        @Test
+        void FAIL로_바꿀_때_보낸_사유는_앞뒤_공백을_지워_항목과_이력에_남긴다() throws Exception {
+            // given
+            Sprint sprint = sprintFixture.스프린트(SprintStatus.MANUAL_REVIEW);
+            DesignReviewItem item = 디자인_항목(sprint, CellState.PASS);
+
+            // when
+            상태_변경(item.getId(), "FAIL", 0, "  애플 버튼이 맨 앞이다  ")
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.state").value("FAIL"))
+                    .andExpect(jsonPath("$.source").value("MANUAL"))
+                    .andExpect(jsonPath("$.reason").value("애플 버튼이 맨 앞이다"));
+
+            // then
+            이력(item.getId())
+                    .andExpect(jsonPath("$[0].state").value("FAIL"))
+                    .andExpect(jsonPath("$[0].reason").value("애플 버튼이 맨 앞이다"));
+        }
+
+        @Test
+        void FAIL이_아니면_사유를_무시하고_빈_사유는_null로_본다() throws Exception {
+            // given
+            Sprint sprint = sprintFixture.스프린트(SprintStatus.MANUAL_REVIEW);
+            DesignReviewItem passed = 디자인_항목(sprint, CellState.FAIL);
+            DesignReviewItem failed = 디자인_항목(sprint, CellState.PASS);
+
+            // when & then
+            상태_변경(passed.getId(), "PASS", 0, "무시되는 사유")
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.reason").value(nullValue()));
+            상태_변경(failed.getId(), "FAIL", 0, "   ")
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.state").value("FAIL"))
+                    .andExpect(jsonPath("$.reason").value(nullValue()));
+        }
+
+        @Test
+        void 이미_FAIL인_항목에_다른_사유를_보내면_사유만_바꾸고_이력을_남긴다() throws Exception {
+            // given
+            Sprint sprint = sprintFixture.스프린트(SprintStatus.MANUAL_REVIEW);
+            DesignReviewItem item = 디자인_항목(sprint, CellState.FAIL);
+
+            // when
+            상태_변경(item.getId(), "FAIL", 0, "사람 사유")
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.state").value("FAIL"))
+                    .andExpect(jsonPath("$.source").value("MANUAL"))
+                    .andExpect(jsonPath("$.reason").value("사람 사유"))
+                    .andExpect(jsonPath("$.version").value(1));
+
+            // then
+            이력(item.getId())
+                    .andExpect(jsonPath("$", hasSize(1)))
+                    .andExpect(jsonPath("$[0].state").value("FAIL"))
+                    .andExpect(jsonPath("$[0].source").value("MANUAL"))
+                    .andExpect(jsonPath("$[0].reason").value("사람 사유"));
+        }
+
+        @Test
+        void 이미_FAIL인_항목에_사유_없이_FAIL을_보내면_바꾸지_않는다() throws Exception {
+            // given
+            Sprint sprint = sprintFixture.스프린트(SprintStatus.MANUAL_REVIEW);
+            DesignReviewItem item = 디자인_항목(sprint, CellState.FAIL);
+
+            // when
+            상태_변경(item.getId(), "FAIL", 0)
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.source").value("AUTO"))
+                    .andExpect(jsonPath("$.reason").value("자동 비교"))
+                    .andExpect(jsonPath("$.version").value(0));
+
+            // then
+            이력(item.getId())
+                    .andExpect(jsonPath("$", hasSize(0)));
+        }
+
+        @Test
+        void 사유가_앞뒤_공백을_지운_뒤_500자를_넘으면_상태와_관계없이_400_GLOBAL_4001() throws Exception {
+            // given
+            Sprint sprint = sprintFixture.스프린트(SprintStatus.MANUAL_REVIEW);
+            DesignReviewItem item = 디자인_항목(sprint, CellState.PASS);
+
+            // when & then
+            상태_변경(item.getId(), "FAIL", 0, "가".repeat(501))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.error").value("GLOBAL_4001"));
+            상태_변경(item.getId(), "UNCHECKED", 0, "가".repeat(501))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.error").value("GLOBAL_4001"));
+            상태_변경(item.getId(), "FAIL", 0, "  " + "가".repeat(500) + "  ")
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.reason").value("가".repeat(500)));
+        }
+    }
+
+    @Nested
     @DisplayName("디자인 검수 항목을 수정할 때")
     class 수정 {
 
@@ -205,7 +304,7 @@ class DesignReviewControllerIntegrationTest {
         }
 
         @Test
-        void 이미_사람이_미검수로_둔_항목은_이력을_더_남기지_않는다() throws Exception {
+        void 이미_사람이_미검수로_둔_항목도_내용을_바꾸면_초기화_기록을_1건_남긴다() throws Exception {
             // given
             Sprint sprint = sprintFixture.스프린트(SprintStatus.MANUAL_REVIEW);
             DesignReviewItem item = 디자인_항목(sprint, CellState.FAIL);
@@ -215,10 +314,15 @@ class DesignReviewControllerIntegrationTest {
             수정(item.getId(), "{\"title\": \"다른 행위\", \"version\": 1}")
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.title").value("다른 행위"))
-                    .andExpect(jsonPath("$.state").value("UNCHECKED"));
+                    .andExpect(jsonPath("$.state").value("UNCHECKED"))
+                    .andExpect(jsonPath("$.reason").value("항목 수정으로 판정 초기화"));
 
             // then
-            이력(item.getId()).andExpect(jsonPath("$", hasSize(1)));
+            이력(item.getId())
+                    .andExpect(jsonPath("$", hasSize(2)))
+                    .andExpect(jsonPath("$[0].state").value("UNCHECKED"))
+                    .andExpect(jsonPath("$[0].source").value("MANUAL"))
+                    .andExpect(jsonPath("$[0].reason").value("항목 수정으로 판정 초기화"));
         }
 
         @Test
@@ -375,6 +479,18 @@ class DesignReviewControllerIntegrationTest {
                 .header("Authorization", BEARER)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"state\": \"" + state + "\", \"version\": " + version + "}"));
+    }
+
+    private ResultActions 상태_변경(
+            long itemId,
+            String state,
+            int version,
+            String reason
+    ) throws Exception {
+        return mockMvc.perform(put(ITEMS_PATH + itemId)
+                .header("Authorization", BEARER)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"state\": \"" + state + "\", \"version\": " + version + ", \"reason\": \"" + reason + "\"}"));
     }
 
     private ResultActions 수정(

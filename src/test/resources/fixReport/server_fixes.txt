@@ -1,0 +1,27 @@
+Test Agile / SERVER 수정사항 3건
+기준 코드: gravit-server qa-baseline@0eced9c
+기대 결과 우선순위: Notion 명세 > Figma 시안 > 코드
+
+[NOTC-01] 공지사항 목록
+명세: https://www.notion.so/4145b32f003c81b5876edef41689dfc3
+
+1. 공지 목록을 최신순으로 보여준다
+   기대: 목록 응답이 작성일 내림차순이다
+     - 고정 공지는 맨 위다
+   문제: 정렬 조건이 없다
+   명세 행: NOTC-01-B1, NOTC-01-B2
+   코드: gravit-server/src/main/java/gravit/code/notice/service/NoticeQueryService.java:30-42
+   코드: gravit-server/src/main/java/gravit/code/notice/repository/NoticeRepository.java:12-15
+
+2. 빈 목록 안내
+   기대: 공지가 없으면 안내 문구를 보여준다
+   문제: (사유 없음)
+
+[NOTC-02] 공지사항 상세
+명세: https://www.notion.so/5255c43f114d92c6987fef052790ead4
+
+3. 이전·다음 공지로 이동한다
+   기대: 상세 응답에 이전·다음 공지 정보가 있다
+   문제: 응답 DTO에 이전·다음 공지 필드가 없다
+   명세 행: NOTC-02-B2
+   코드: gravit-server/src/main/java/gravit/code/notice/dto/response/NoticeDetailResponse.java:8-20

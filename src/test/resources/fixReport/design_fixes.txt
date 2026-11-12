@@ -1,0 +1,22 @@
+3rd Agile / DESIGN 수정사항 2건
+기준 시안: Figma AbC123
+기대 결과 우선순위: Notion 명세 > Figma 시안 > 코드
+
+[LGN-01] 로그인 · 웹
+명세: https://www.notion.so/6366d54f225ea3d7a98a0f1638a1fbe5
+
+1. 로그인 버튼 영역
+   소셜 버튼 순서
+   기대: 카카오, 구글, 애플 순서다 (LGN-01-C1)
+   문제: 애플 버튼이 맨 앞이다
+   명세 행: LGN-01-C1
+   시안: https://www.figma.com/design/AbC123?node-id=12-34
+   시안: https://www.figma.com/design/AbC123?node-id=12-56
+
+[LGN-01] 로그인 · 앱
+명세: https://www.notion.so/6366d54f225ea3d7a98a0f1638a1fbe5
+
+2. 로그인 버튼 영역
+   기대: 카카오, 구글 순서다 (LGN-01-C1)
+   문제: (사유 없음)
+   명세 행: LGN-01-C1

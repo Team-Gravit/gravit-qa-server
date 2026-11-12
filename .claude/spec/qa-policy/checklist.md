@@ -46,8 +46,10 @@
 - 사람이 추가한 항목: `origin = HUMAN`, `specRowIds` 없음, `classification = MANUAL` 고정. 스프린트 대상 기능이 아니면 404 `CHECKLIST_4042`
   - 1차(AUTO)는 LLM 판정 대상인데 추가한 항목에는 1차 판정이 다시 돌지 않으므로 2차로 둔다
   - 요청의 `classification`은 받되 무시한다(옛 admin 호환). 값이 AUTO여도 MANUAL로 저장한다
-- 수정은 전달한 필드만 바꾼다. 행위, 설명, 파트, 분류 중 하나라도 바뀌면 그 항목의 셀 중 판정이 있는 셀(NOT_APPLICABLE 제외)을 UNCHECKED, `source = MANUAL`로 되돌리고 이력 `reason = "항목 수정으로 판정 초기화"`
-- `parts` 변경: 빠진 파트는 NOT_APPLICABLE, 다시 들어온 파트는 UNCHECKED
+- 수정은 전달한 필드만 바꾼다. 행위, 설명, 파트, 분류 중 하나라도 바뀌면 그 항목의 셀(NOT_APPLICABLE 제외)을 상태와 관계없이 UNCHECKED, `source = MANUAL`로 되돌리고 셀마다 초기화 기록 1건(`reason = "항목 수정으로 판정 초기화"`)을 남긴다
+  - 이미 사람이 둔 UNCHECKED여도 UNCHECKED → UNCHECKED 기록을 남긴다. 수정사항 파일이 사유와 근거를 고를 때 이 기록을 경계로 쓴다(`fix-report.md`)
+  - 같은 값을 보내 바뀐 것이 없으면 변경으로 보지 않고 기록을 남기지 않는다
+- `parts` 변경: 빠진 파트는 NOT_APPLICABLE, 다시 들어온 파트는 UNCHECKED. 이 셀들은 파트 변경 기록 1건만 남고 초기화 기록을 더 남기지 않는다
 - 분류는 AUTO에서 MANUAL로만 바꿀 수 있다(MANUAL → AUTO는 400 `CHECKLIST_4002`, 같은 값은 변경 없음). 옮기면 2차 체크리스트에 나타나고 1차 판정을 다시 돌리지는 않는다(사람이 확인)
 - 삭제: `DELETE /checklist-items/{id}?version=` → 204. 셀과 셀 이력도 지워진다
 - 낙관적 잠금: `version`이 다르면 409 `GLOBAL_4091`
@@ -56,8 +58,10 @@
 
 - 상태 UNCHECKED, PASS, FAIL, NOT_APPLICABLE. 출처 AUTO(1차 판정), MANUAL(사람)
 - 변경 요청은 UNCHECKED, PASS, FAIL만(NOT_APPLICABLE은 400 `CHECKLIST_4001`). NOT_APPLICABLE 셀은 422 `CHECKLIST_4223`
-- 1차 판정 결과도 사람이 바꿀 수 있다. 사람이 바꾸면 `source = MANUAL`, `reason = null`, `evidence = []`
-- `evidence`: 1차 판정 근거 코드 위치 `[{path, startLine, endLine}]`(`path`는 `{저장소}/{경로}`). 1차 판정만 채우고, 사람 변경과 판정 초기화는 빈 배열
+- 1차 판정 결과도 사람이 바꿀 수 있다. 사람이 바꾸면 `source = MANUAL`, `evidence = []`. `reason`은 FAIL로 바꿀 때 요청의 `reason`(선택), 그 밖에는 null
+  - 요청 `{state, version, reason?}`. `reason`은 앞뒤 공백을 지우고 빈 문자열은 null, 500자를 넘으면 `state`와 관계없이 400 `GLOBAL_4001`. FAIL이 아니면 무시한다(`fix-report.md` G3)
+  - 상태가 같으면 바꾸지 않는다. 예외: 지금 FAIL인 셀에 FAIL과 다른 사유를 보내면 `source = MANUAL`, 사유만 바꾸고 `evidence`는 그대로 두며 이력 FAIL → FAIL 1건(D1)
+- `evidence`: 1차 판정 근거 코드 위치 `[{path, startLine, endLine}]`(`path`는 `{저장소}/{경로}`). 1차 판정만 채운다. 사람 변경과 판정 초기화는 빈 배열이고, 사람이 FAIL 사유만 고칠 때는 지금 값을 그대로 둔다
 - 바뀌면 `check_cell_history`(이전, 새 상태, 출처, 사유, 근거, 변경자, 시각). 1차 판정은 상태가 같아도 사유와 근거를 함께 이력으로 남긴다
 - `editable` = MANUAL_REVIEW이고 NOT_APPLICABLE이 아님
 

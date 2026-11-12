@@ -14,6 +14,11 @@ public interface DesignReviewItemRepository extends JpaRepository<DesignReviewIt
 
     List<DesignReviewItem> findAllBySprintId(long sprintId);
 
+    List<DesignReviewItem> findAllBySprintIdAndState(
+            long sprintId,
+            CellState state
+    );
+
     long countBySprintIdAndState(
             long sprintId,
             CellState state
