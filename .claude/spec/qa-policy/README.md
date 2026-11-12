@@ -9,6 +9,7 @@
 | 체크리스트 생성(D7 묶음, D8 분류), 1차·2차 조회, 편집, 셀, 진행도, 종료 | [`checklist.md`](checklist.md) |
 | 디자인 검수(Figma 레이어와 명세 C행 비교) | [`design-review.md`](design-review.md) |
 | 1차 자동화 검수(코드 고르기, 나눠 담기, 판정 합치기) | [`auto-review.md`](auto-review.md) |
+| 수정사항 파일(파트별 TXT, 내려받기 조건, 틀, 사유·근거 고르기), 사람이 Fail로 바꿀 때 남기는 사유 | [`fix-report.md`](fix-report.md) |
 | Figma QA 페이지 해석(화면 ID, 상태, 경고) | 가이드 3-3 → [`figma-qa-page.md`](figma-qa-page.md) |
 | 외부 연동 결정값(재시도, 타임아웃, LLM 호출 제한, 쓰기 범위) | 설계 8, 10 → [`external-adapters.md`](external-adapters.md) |
 | 관리자 인증(`/admin/me` 판정, 캐시) | 설계 7 |

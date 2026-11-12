@@ -19,6 +19,7 @@ src/main/java/gravit/qa/
 ├── checklist/           # 체크 항목, 체크 셀, 셀 이력, 체크리스트 생성
 ├── designReview/        # 디자인 검수 항목, 이력, Figma 시안과 명세 비교
 ├── autoReview/          # 1차 판정: 저장소 코드 선택, 나눠 담기, 판정 (엔티티 없음, 결과는 checklist 셀)
+├── fixReport/           # 파트별 수정사항 파일 (엔티티 없음, 읽기 전용, LLM 없음)
 └── adapter/             # 외부 연동: figma, notion, github, openapi, llm
 ```
 
