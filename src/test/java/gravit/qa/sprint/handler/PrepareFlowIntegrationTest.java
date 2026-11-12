@@ -27,6 +27,7 @@ import java.util.List;
 
 import static gravit.qa.sprint.fixture.SetupStubFixture.C1_ROW_ID;
 import static gravit.qa.sprint.fixture.SetupStubFixture.COMPLETIONS_PATH;
+import static gravit.qa.sprint.fixture.SetupStubFixture.SERVER_CONTROLLER;
 import static gravit.qa.sprint.fixture.SetupStubFixture.HISTORY_ROW_ID;
 import static gravit.qa.sprint.fixture.SetupStubFixture.HISTORY_TABLE_ID;
 import static gravit.qa.sprint.fixture.SetupStubFixture.LLM_응답;
@@ -165,7 +166,10 @@ class PrepareFlowIntegrationTest {
                     .andExpect(jsonPath("$.features[0].items[0].cells[0].part").value("SERVER"))
                     .andExpect(jsonPath("$.features[0].items[0].cells[0].state").value("PASS"))
                     .andExpect(jsonPath("$.features[0].items[0].cells[0].source").value("AUTO"))
-                    .andExpect(jsonPath("$.features[0].items[0].cells[0].reason").value(containsString("UnitController.java:9-12")))
+                    .andExpect(jsonPath("$.features[0].items[0].cells[0].reason").value("유닛 조회 API가 진행률을 돌려준다"))
+                    .andExpect(jsonPath("$.features[0].items[0].cells[0].evidence[0].path").value("gravit-server/" + SERVER_CONTROLLER))
+                    .andExpect(jsonPath("$.features[0].items[0].cells[0].evidence[0].startLine").value(9))
+                    .andExpect(jsonPath("$.features[0].items[0].cells[0].evidence[0].endLine").value(12))
                     .andExpect(jsonPath("$.features[0].items[0].cells[1].state").value("FAIL"))
                     .andExpect(jsonPath("$.features[0].items[0].cells[1].editable").value(true));
             체크리스트(2)
