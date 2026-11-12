@@ -110,7 +110,6 @@ jobs:
             # LLM 게이트웨이(litellm-gw)와 통신할 외부 네트워크. 없으면 만들어 compose 기동이 막히지 않게 한다.
             docker network inspect llm-net >/dev/null 2>&1 || docker network create llm-net
 
-            # qa-e2e는 C7 전까지 올리지 않는다.
             compose -f docker-compose-qa.yml pull qa-api
             compose -f docker-compose-qa.yml up -d --no-deps --force-recreate qa-api
 

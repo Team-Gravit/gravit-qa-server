@@ -6,6 +6,7 @@ import gravit.qa.feature.dto.internal.FeatureDto;
 import gravit.qa.feature.dto.internal.SprintFeatureDto;
 import gravit.qa.feature.repository.FeatureRepository;
 import gravit.qa.feature.repository.SprintFeatureRepository;
+import gravit.qa.global.exception.domain.RestApiException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,6 +17,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+
+import static gravit.qa.global.exception.domain.CustomErrorCode.CHECKLIST_FEATURE_NOT_IN_SPRINT;
 
 @Service
 @RequiredArgsConstructor
@@ -35,13 +38,21 @@ public class FeatureQueryService {
                 .collect(Collectors.toMap(Feature::getId, Function.identity()));
 
         return sprintFeatures.stream()
-                .map(sprintFeature -> SprintFeatureDto.of(
-                        FeatureDto.from(featureIdToFeature.get(sprintFeature.getFeatureId())),
-                        sprintFeature.getFigmaNodeIds(),
-                        sprintFeature.getWarnings()
-                ))
-                .sorted(Comparator.comparing(sprintFeature -> sprintFeature.feature().screenId()))
+                .map(sprintFeature -> SprintFeatureDto.of(FeatureDto.from(featureIdToFeature.get(sprintFeature.getFeatureId())), sprintFeature))
+                .sorted(Comparator.comparing(SprintFeatureDto::screenId))
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public SprintFeatureDto getSprintFeature(
+            long sprintId,
+            long featureId
+    ) {
+        SprintFeature sprintFeature = sprintFeatureRepository.findBySprintIdAndFeatureId(sprintId, featureId)
+                .orElseThrow(() -> new RestApiException(CHECKLIST_FEATURE_NOT_IN_SPRINT));
+        Feature feature = featureRepository.findById(featureId)
+                .orElseThrow(() -> new RestApiException(CHECKLIST_FEATURE_NOT_IN_SPRINT));
+        return SprintFeatureDto.of(FeatureDto.from(feature), sprintFeature);
     }
 
     @Transactional(readOnly = true)

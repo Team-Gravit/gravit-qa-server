@@ -3,20 +3,16 @@ package gravit.qa.sprint.controller;
 import gravit.qa.checklist.domain.CellState;
 import gravit.qa.checklist.domain.ChecklistItem;
 import gravit.qa.checklist.domain.Classification;
-import gravit.qa.checklist.domain.ReviewState;
+import gravit.qa.designReview.domain.DesignPlatform;
 import gravit.qa.feature.domain.Feature;
 import gravit.qa.feature.domain.Part;
 import gravit.qa.job.domain.JobType;
 import gravit.qa.job.service.JobCommandService;
 import gravit.qa.sprint.domain.Sprint;
 import gravit.qa.sprint.domain.SprintStatus;
-import gravit.qa.sprint.domain.WarningCode;
-import gravit.qa.sprint.dto.internal.WarningDto;
 import gravit.qa.sprint.fixture.SprintFixture;
 import gravit.qa.sprint.repository.SprintRepository;
-import gravit.qa.sprint.service.SprintCommandService;
 import gravit.qa.support.HttpStubServer;
-import gravit.qa.support.HttpStubServer.RecordedRequest;
 import gravit.qa.support.HttpStubServer.StubResponse;
 import gravit.qa.support.QaSpringBootTest;
 import org.junit.jupiter.api.DisplayName;
@@ -32,9 +28,7 @@ import org.springframework.test.web.servlet.ResultActions;
 import java.util.List;
 import java.util.Map;
 
-import static gravit.qa.sprint.fixture.SetupStubFixture.AOS_SHA;
 import static gravit.qa.sprint.fixture.SetupStubFixture.FIGMA_URL;
-import static gravit.qa.sprint.fixture.SetupStubFixture.SERVER_SHA;
 import static gravit.qa.sprint.fixture.SetupStubFixture.SPRINT_PAGE_ID;
 import static gravit.qa.sprint.fixture.SetupStubFixture.SPRINT_PATH;
 import static gravit.qa.sprint.fixture.SetupStubFixture.다른_DB_페이지;
@@ -64,9 +58,6 @@ class SprintControllerIntegrationTest {
     private SprintFixture sprintFixture;
 
     @Autowired
-    private SprintCommandService sprintCommandService;
-
-    @Autowired
     private SprintRepository sprintRepository;
 
     @Autowired
@@ -80,7 +71,7 @@ class SprintControllerIntegrationTest {
     class 등록 {
 
         @Test
-        void Notion_행으로_DRAFT를_만들고_기간이_없어도_등록된다() throws Exception {
+        void Notion_행으로_DRAFT를_만들고_변경_요약을_summary로_내려준다() throws Exception {
             // given
             externalApiStubServer.stub("GET", SPRINT_PATH, json(200, 스프린트_페이지(List.of(), FIGMA_URL)));
 
@@ -88,15 +79,18 @@ class SprintControllerIntegrationTest {
             등록(NOTION_URL)
                     .andExpect(status().isCreated())
                     .andExpect(jsonPath("$.sprintKey").value("3rd Agile"))
-                    .andExpect(jsonPath("$.notionPageId").value(SPRINT_PAGE_ID))
+                    .andExpect(jsonPath("$.summary").value("유닛 상세 개편"))
                     .andExpect(jsonPath("$.status").value("DRAFT"))
-                    .andExpect(jsonPath("$.periodStart").value(nullValue()))
-                    .andExpect(jsonPath("$.figmaFileKey").value("AbC123"))
-                    .andExpect(jsonPath("$.createdBy").value(7))
-                    .andExpect(jsonPath("$.guide.stage").value("PREPARE"))
-                    .andExpect(jsonPath("$.guide.nextAction").value("START_SETUP"))
-                    .andExpect(jsonPath("$.progress", hasSize(3)))
-                    .andExpect(jsonPath("$.baseline").value(nullValue()));
+                    .andExpect(jsonPath("$.version").value(0))
+                    .andExpect(jsonPath("$.connections", hasSize(0)))
+                    .andExpect(jsonPath("$.progress", hasSize(4)))
+                    .andExpect(jsonPath("$.progress[0].part").value("DESIGN"))
+                    .andExpect(jsonPath("$.setupSteps", hasSize(5)))
+                    .andExpect(jsonPath("$.setupSteps[0].key").value("CONNECT"))
+                    .andExpect(jsonPath("$.setupSteps[0].status").value("PENDING"))
+                    .andExpect(jsonPath("$.setupSteps[0].attempt").value(0))
+                    .andExpect(jsonPath("$.latestJob").value(nullValue()))
+                    .andExpect(jsonPath("$.pendingReflectionCount").value(0));
         }
 
         @Test
@@ -177,40 +171,53 @@ class SprintControllerIntegrationTest {
     class 조회 {
 
         @Test
-        void 목록은_최신_생성순이고_상태로_거를_수_있다() throws Exception {
+        void 목록은_최신_생성순이고_id_이름_요약_상태만_내려준다() throws Exception {
             // given
-            sprintFixture.스프린트("2nd Agile", "44444444444444444444444444444444", SprintStatus.CLOSED);
-            sprintFixture.스프린트(SprintStatus.DRAFT);
+            sprintFixture.스프린트("2nd Agile", "55555555555555555555555555555555", SprintStatus.CLOSED);
+            sprintFixture.스프린트(SprintStatus.MANUAL_REVIEW);
 
             // when & then
             mockMvc.perform(get(SPRINTS_PATH).header("Authorization", BEARER))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$", hasSize(2)))
                     .andExpect(jsonPath("$[0].sprintKey").value("3rd Agile"))
-                    .andExpect(jsonPath("$[0].guide.nextAction").value("START_SETUP"))
-                    .andExpect(jsonPath("$[1].guide.stage").value("DONE"));
-
-            mockMvc.perform(get(SPRINTS_PATH).param("status", "CLOSED").header("Authorization", BEARER))
-                    .andExpect(jsonPath("$", hasSize(1)))
-                    .andExpect(jsonPath("$[0].sprintKey").value("2nd Agile"));
+                    .andExpect(jsonPath("$[0].summary").value("유닛 상세 개편"))
+                    .andExpect(jsonPath("$[0].status").value("MANUAL_REVIEW"))
+                    .andExpect(jsonPath("$[0].progress").doesNotExist())
+                    .andExpect(jsonPath("$[1].sprintKey").value("2nd Agile"));
         }
 
         @Test
-        void 상세는_스프린트_경고를_코드와_메시지로_함께_내려준다() throws Exception {
+        void 상세는_디자인_항목과_1차_2차_셀을_파트별로_모아_진행도를_내려준다() throws Exception {
             // given
-            Sprint sprint = sprintFixture.스프린트(SprintStatus.REVIEW);
-            Sprint other = sprintFixture.스프린트("2nd Agile", "44444444444444444444444444444444", SprintStatus.REVIEW);
-            sprintCommandService.addWarning(sprint.getId(), WarningDto.of(WarningCode.SPEC_READ_FAILED, "LRN-02: 본문 첫 블록이 기본 정보 표가 아닙니다"));
+            Sprint sprint = sprintFixture.스프린트(SprintStatus.MANUAL_REVIEW);
+            Feature feature = sprintFixture.기능("LRN-02", List.of(Part.SERVER, Part.WEB));
+            sprintFixture.대상_기능(sprint.getId(), feature.getId(), true);
+            sprintFixture.연결_성공(sprint.getId());
+            ChecklistItem auto = sprintFixture.항목(sprint.getId(), feature.getId(), Classification.AUTO, List.of(Part.SERVER, Part.WEB));
+            ChecklistItem manual = sprintFixture.항목(sprint.getId(), feature.getId(), Classification.MANUAL, List.of(Part.WEB));
+            sprintFixture.셀_판정(auto.getId(), Part.SERVER, CellState.PASS, "코드 확인");
+            sprintFixture.셀_체크(manual.getId(), Part.WEB, CellState.FAIL);
+            sprintFixture.디자인_항목(sprint.getId(), feature.getId(), DesignPlatform.WEB, CellState.UNCHECKED);
 
             // when & then
             mockMvc.perform(get(SPRINTS_PATH + "/" + sprint.getId()).header("Authorization", BEARER))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.warnings", hasSize(1)))
-                    .andExpect(jsonPath("$.warnings[0].code").value("SPEC_READ_FAILED"))
-                    .andExpect(jsonPath("$.warnings[0].message").value("LRN-02: 본문 첫 블록이 기본 정보 표가 아닙니다"));
-
-            mockMvc.perform(get(SPRINTS_PATH + "/" + other.getId()).header("Authorization", BEARER))
-                    .andExpect(jsonPath("$.warnings", hasSize(0)));
+                    .andExpect(jsonPath("$.connections", hasSize(5)))
+                    .andExpect(jsonPath("$.connections[0].target").value("NOTION"))
+                    .andExpect(jsonPath("$.connections[0].ref").value(nullValue()))
+                    .andExpect(jsonPath("$.connections[3].ref").value("qa-baseline@bbbbbbb"))
+                    .andExpect(jsonPath("$.progress[0].part").value("DESIGN"))
+                    .andExpect(jsonPath("$.progress[0].total").value(1))
+                    .andExpect(jsonPath("$.progress[0].checked").value(0))
+                    .andExpect(jsonPath("$.progress[1].part").value("WEB"))
+                    .andExpect(jsonPath("$.progress[1].total").value(2))
+                    .andExpect(jsonPath("$.progress[1].checked").value(1))
+                    .andExpect(jsonPath("$.progress[1].fail").value(1))
+                    .andExpect(jsonPath("$.progress[2].part").value("APP"))
+                    .andExpect(jsonPath("$.progress[2].total").value(0))
+                    .andExpect(jsonPath("$.progress[3].part").value("SERVER"))
+                    .andExpect(jsonPath("$.progress[3].pass").value(1));
         }
 
         @Test
@@ -220,75 +227,6 @@ class SprintControllerIntegrationTest {
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.error").value("SPRINT_4041"));
         }
-
-        @Test
-        void 진행률은_거절_항목을_빼고_파트별로_센다() throws Exception {
-            // given
-            Sprint sprint = sprintFixture.스프린트(SprintStatus.IN_PROGRESS);
-            Feature feature = sprintFixture.기능("LRN-02", List.of(Part.SERVER, Part.WEB));
-            ChecklistItem checked = sprintFixture.항목(sprint.getId(), feature.getId(), Classification.MANUAL, ReviewState.CONFIRMED, List.of(Part.WEB));
-            sprintFixture.셀_체크(checked.getId(), Part.WEB, CellState.PASS);
-            sprintFixture.항목(sprint.getId(), feature.getId(), Classification.MANUAL, ReviewState.CONFIRMED, List.of(Part.SERVER, Part.WEB));
-            sprintFixture.항목(sprint.getId(), feature.getId(), Classification.MANUAL, ReviewState.REJECTED, List.of(Part.WEB));
-
-            // when & then
-            mockMvc.perform(get(SPRINTS_PATH + "/" + sprint.getId()).header("Authorization", BEARER))
-                    .andExpect(jsonPath("$.progress[1].part").value("WEB"))
-                    .andExpect(jsonPath("$.progress[1].total").value(2))
-                    .andExpect(jsonPath("$.progress[1].pass").value(1))
-                    .andExpect(jsonPath("$.progress[1].unchecked").value(1))
-                    .andExpect(jsonPath("$.progress[0].unchecked").value(1))
-                    .andExpect(jsonPath("$.progress[2].notApplicable").value(2))
-                    .andExpect(jsonPath("$.guide.nextAction").value("CHECK_CELLS"))
-                    .andExpect(jsonPath("$.guide.blockers", hasSize(2)));
-        }
-    }
-
-    @Nested
-    @DisplayName("QA 준비하기를 시작할 때")
-    class 준비_시작 {
-
-        @Test
-        void SETUP_작업을_큐에_넣고_스프린트를_PREPARING으로_바꾼다() throws Exception {
-            // given
-            Sprint sprint = sprintFixture.스프린트(SprintStatus.DRAFT);
-
-            // when & then
-            준비(sprint.getId())
-                    .andExpect(status().isAccepted())
-                    .andExpect(jsonPath("$.type").value("SETUP"))
-                    .andExpect(jsonPath("$.status").value("QUEUED"))
-                    .andExpect(jsonPath("$.steps", hasSize(8)));
-
-            assertThat(sprintRepository.findById(sprint.getId()).orElseThrow().getStatus()).isEqualTo(SprintStatus.PREPARING);
-        }
-
-        @Test
-        void 준비_중이면_409_SPRINT_4092() throws Exception {
-            // given
-            Sprint sprint = sprintFixture.스프린트(SprintStatus.DRAFT);
-            준비(sprint.getId());
-
-            // when & then
-            준비(sprint.getId())
-                    .andExpect(status().isConflict())
-                    .andExpect(jsonPath("$.error").value("SPRINT_4092"));
-        }
-
-        @Test
-        void 확정_이후에는_다시_준비할_수_없어_409_SPRINT_4092() throws Exception {
-            // given
-            Sprint sprint = sprintFixture.스프린트(SprintStatus.IN_PROGRESS);
-
-            // when & then
-            준비(sprint.getId())
-                    .andExpect(status().isConflict())
-                    .andExpect(jsonPath("$.error").value("SPRINT_4092"));
-        }
-
-        private ResultActions 준비(long sprintId) throws Exception {
-            return mockMvc.perform(post(SPRINTS_PATH + "/" + sprintId + "/setup-jobs").header("Authorization", BEARER));
-        }
     }
 
     @Nested
@@ -296,49 +234,22 @@ class SprintControllerIntegrationTest {
     class 종료 {
 
         @Test
-        void 미검수_셀이_없으면_CLOSED가_되고_Notion_QA_기준점에_SHA_요약을_쓴다() throws Exception {
+        void 미검수가_없으면_FAIL이_있어도_CLOSED가_된다() throws Exception {
             // given
-            Sprint sprint = 검수_끝난_스프린트();
-            externalApiStubServer.stub("GET", SPRINT_PATH, json(200, 스프린트_페이지(List.of(), FIGMA_URL)));
-            externalApiStubServer.stub("PATCH", SPRINT_PATH, json(200, 스프린트_페이지(List.of(), FIGMA_URL)));
+            Sprint sprint = 검수_중인_스프린트(CellState.FAIL, CellState.PASS);
 
             // when & then
             종료(sprint.getId(), sprint.getVersion())
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.status").value("CLOSED"))
-                    .andExpect(jsonPath("$.closedAt").isNotEmpty())
-                    .andExpect(jsonPath("$.guide.stage").value("DONE"));
-
-            RecordedRequest patch = externalApiStubServer.requests("PATCH", SPRINT_PATH).getFirst();
-            assertThat(patch.body()).contains("QA 기준점", "gravit-server release " + SERVER_SHA, "gravit-aos release " + AOS_SHA + " (versionCode 1, versionName 1.0.1)");
-            assertThat(sprintRepository.findById(sprint.getId()).orElseThrow().getWarnings()).isEmpty();
+                    .andExpect(jsonPath("$.status").value("CLOSED"));
+            assertThat(externalApiStubServer.requests()).isEmpty();
+            assertThat(sprintRepository.findById(sprint.getId()).orElseThrow().getClosedAt()).isNotNull();
         }
 
         @Test
-        void Notion_기록이_실패해도_CLOSED가_되고_NOTION_WRITE_FAILED_경고를_남긴다() throws Exception {
+        void 체크리스트_셀이_남아_있으면_409_SPRINT_4093() throws Exception {
             // given
-            Sprint sprint = 검수_끝난_스프린트();
-            externalApiStubServer.stub("GET", SPRINT_PATH, StubResponse.status(404));
-
-            // when & then
-            종료(sprint.getId(), sprint.getVersion())
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.status").value("CLOSED"))
-                    .andExpect(jsonPath("$.warnings", hasSize(1)))
-                    .andExpect(jsonPath("$.warnings[0].code").value("NOTION_WRITE_FAILED"))
-                    .andExpect(jsonPath("$.warnings[0].message").isNotEmpty());
-
-            assertThat(sprintRepository.findById(sprint.getId()).orElseThrow().getWarnings())
-                    .extracting(WarningDto::code)
-                    .containsExactly(WarningCode.NOTION_WRITE_FAILED);
-        }
-
-        @Test
-        void 미검수_셀이_남아_있으면_409_SPRINT_4093() throws Exception {
-            // given
-            Sprint sprint = sprintFixture.스프린트(SprintStatus.IN_PROGRESS);
-            Feature feature = sprintFixture.기능("LRN-02", List.of(Part.WEB));
-            sprintFixture.항목(sprint.getId(), feature.getId(), Classification.MANUAL, ReviewState.CONFIRMED, List.of(Part.WEB));
+            Sprint sprint = 검수_중인_스프린트(CellState.UNCHECKED, CellState.PASS);
 
             // when & then
             종료(sprint.getId(), sprint.getVersion())
@@ -347,44 +258,20 @@ class SprintControllerIntegrationTest {
         }
 
         @Test
-        void 거절_항목의_미검수_셀은_종료를_막지_않는다() throws Exception {
+        void 디자인_항목이_남아_있으면_409_SPRINT_4093() throws Exception {
             // given
-            Sprint sprint = 검수_끝난_스프린트();
-            Feature feature = sprintFixture.기능("MY-04", List.of(Part.WEB));
-            sprintFixture.항목(sprint.getId(), feature.getId(), Classification.MANUAL, ReviewState.REJECTED, List.of(Part.WEB));
-
-            // when & then
-            종료(sprint.getId(), sprint.getVersion())
-                    .andExpect(status().isOk());
-        }
-
-        @Test
-        void 실행_중인_자동_실행이_있으면_409_SPRINT_4094() throws Exception {
-            // given
-            Sprint sprint = 검수_끝난_스프린트();
-            jobCommandService.enqueue(JobType.AUTO_RUN, sprint.getId(), Map.of());
+            Sprint sprint = 검수_중인_스프린트(CellState.PASS, CellState.UNCHECKED);
 
             // when & then
             종료(sprint.getId(), sprint.getVersion())
                     .andExpect(status().isConflict())
-                    .andExpect(jsonPath("$.error").value("SPRINT_4094"));
+                    .andExpect(jsonPath("$.error").value("SPRINT_4093"));
         }
 
         @Test
-        void version이_다르면_409_GLOBAL_4091() throws Exception {
+        void MANUAL_REVIEW가_아니면_409_SPRINT_4092() throws Exception {
             // given
-            Sprint sprint = 검수_끝난_스프린트();
-
-            // when & then
-            종료(sprint.getId(), sprint.getVersion() + 1)
-                    .andExpect(status().isConflict())
-                    .andExpect(jsonPath("$.error").value("GLOBAL_4091"));
-        }
-
-        @Test
-        void 진행_중이_아니면_409_SPRINT_4092() throws Exception {
-            // given
-            Sprint sprint = sprintFixture.스프린트(SprintStatus.REVIEW);
+            Sprint sprint = sprintFixture.스프린트(SprintStatus.AUTO_REVIEW);
 
             // when & then
             종료(sprint.getId(), sprint.getVersion())
@@ -392,12 +279,41 @@ class SprintControllerIntegrationTest {
                     .andExpect(jsonPath("$.error").value("SPRINT_4092"));
         }
 
-        private Sprint 검수_끝난_스프린트() {
-            Sprint sprint = sprintFixture.스프린트(SprintStatus.IN_PROGRESS);
-            sprintFixture.기준점(sprint.getId());
+        @Test
+        void 실행_중인_작업이_있으면_409_JOB_4091() throws Exception {
+            // given
+            Sprint sprint = 검수_중인_스프린트(CellState.PASS, CellState.PASS);
+            jobCommandService.enqueue(JobType.QA_PREPARE, sprint.getId(), Map.of());
+
+            // when & then
+            종료(sprint.getId(), sprint.getVersion())
+                    .andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.error").value("JOB_4091"));
+        }
+
+        @Test
+        void 버전이_다르면_409_GLOBAL_4091() throws Exception {
+            // given
+            Sprint sprint = 검수_중인_스프린트(CellState.PASS, CellState.PASS);
+
+            // when & then
+            종료(sprint.getId(), sprint.getVersion() + 1)
+                    .andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.error").value("GLOBAL_4091"));
+        }
+
+        private Sprint 검수_중인_스프린트(
+                CellState cellState,
+                CellState designState
+        ) {
+            Sprint sprint = sprintFixture.스프린트(SprintStatus.MANUAL_REVIEW);
             Feature feature = sprintFixture.기능("LRN-02", List.of(Part.WEB));
-            ChecklistItem item = sprintFixture.항목(sprint.getId(), feature.getId(), Classification.MANUAL, ReviewState.CONFIRMED, List.of(Part.WEB));
-            sprintFixture.셀_체크(item.getId(), Part.WEB, CellState.FAIL);
+            sprintFixture.대상_기능(sprint.getId(), feature.getId(), false);
+            ChecklistItem item = sprintFixture.항목(sprint.getId(), feature.getId(), Classification.MANUAL, List.of(Part.WEB));
+            if (cellState != CellState.UNCHECKED) {
+                sprintFixture.셀_체크(item.getId(), Part.WEB, cellState);
+            }
+            sprintFixture.디자인_항목(sprint.getId(), feature.getId(), DesignPlatform.WEB, designState);
             return sprint;
         }
 

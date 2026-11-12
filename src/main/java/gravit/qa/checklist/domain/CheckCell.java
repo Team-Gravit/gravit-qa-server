@@ -47,8 +47,8 @@ public class CheckCell {
     @Column(name = "source", nullable = false)
     private CellSource source;
 
-    @Column(name = "auto_run_id")
-    private Long autoRunId;
+    @Column(name = "reason")
+    private String reason;
 
     @Column(name = "updated_by")
     private Long updatedBy;
@@ -87,17 +87,32 @@ public class CheckCell {
                 .toList();
     }
 
+    public boolean isApplicable() {
+        return state != CellState.NOT_APPLICABLE;
+    }
+
     public Optional<CheckCellHistory> applyParts(
             Collection<Part> itemParts,
+            String reason,
             long adminId,
             LocalDateTime now
     ) {
-        CellState target = itemParts.contains(part) ? CellState.UNCHECKED : CellState.NOT_APPLICABLE;
-        boolean included = target == CellState.UNCHECKED;
-        if (included == (state != CellState.NOT_APPLICABLE)) {
+        boolean included = itemParts.contains(part);
+        if (included == isApplicable()) {
             return Optional.empty();
         }
-        return Optional.of(change(target, adminId, now));
+        return Optional.of(change(included ? CellState.UNCHECKED : CellState.NOT_APPLICABLE, CellSource.MANUAL, reason, adminId, now));
+    }
+
+    public Optional<CheckCellHistory> resetJudgment(
+            String reason,
+            long adminId,
+            LocalDateTime now
+    ) {
+        if (!isApplicable() || (state == CellState.UNCHECKED && source == CellSource.MANUAL)) {
+            return Optional.empty();
+        }
+        return Optional.of(change(CellState.UNCHECKED, CellSource.MANUAL, reason, adminId, now));
     }
 
     public CheckCellHistory check(
@@ -105,7 +120,15 @@ public class CheckCell {
             long adminId,
             LocalDateTime now
     ) {
-        return change(target, adminId, now);
+        return change(target, CellSource.MANUAL, null, adminId, now);
+    }
+
+    public CheckCellHistory judge(
+            CellState target,
+            String reason,
+            LocalDateTime now
+    ) {
+        return change(target, CellSource.AUTO, reason, null, now);
     }
 
     public void requireVersion(int expected) {
@@ -116,14 +139,16 @@ public class CheckCell {
 
     private CheckCellHistory change(
             CellState target,
-            long adminId,
+            CellSource source,
+            String reason,
+            Long changedBy,
             LocalDateTime now
     ) {
-        CheckCellHistory history = CheckCellHistory.of(itemId, part, state, target, CellSource.MANUAL, adminId, null, now);
+        CheckCellHistory history = CheckCellHistory.of(itemId, part, state, target, source, reason, changedBy, now);
         this.state = target;
-        this.source = CellSource.MANUAL;
-        this.autoRunId = null;
-        this.updatedBy = adminId;
+        this.source = source;
+        this.reason = reason;
+        this.updatedBy = changedBy;
         this.updatedAt = now;
         return history;
     }

@@ -4,7 +4,8 @@ import gravit.qa.job.domain.JobStatus;
 import gravit.qa.job.domain.JobType;
 import gravit.qa.job.service.JobCommandService;
 import gravit.qa.job.service.JobQueryService;
-import gravit.qa.sprint.handler.SetupJobHandler;
+import gravit.qa.sprint.handler.QaPrepareJobHandler;
+import gravit.qa.sprint.handler.SpecLoadJobHandler;
 import gravit.qa.support.QaSpringBootTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -36,11 +37,15 @@ class JobRunnerApiProfileIntegrationTest {
     private JobRunner jobRunner;
 
     @MockitoSpyBean
-    private SetupJobHandler setupJobHandler;
+    private SpecLoadJobHandler specLoadJobHandler;
+
+    @MockitoSpyBean
+    private QaPrepareJobHandler qaPrepareJobHandler;
 
     @BeforeEach
     void setUp() {
-        doNothing().when(setupJobHandler).handle(any());
+        doNothing().when(specLoadJobHandler).handle(any());
+        doNothing().when(qaPrepareJobHandler).handle(any());
     }
 
     @Nested
@@ -48,9 +53,9 @@ class JobRunnerApiProfileIntegrationTest {
     class 작업_점유 {
 
         @Test
-        void SETUP_작업을_집어_실행한다() {
+        void 명세_로드_작업을_집어_실행한다() {
             // given
-            long jobId = jobCommandService.enqueue(JobType.SETUP, null, Map.of());
+            long jobId = jobCommandService.enqueue(JobType.SPEC_LOAD, null, Map.of());
 
             // when
             boolean ran = jobRunner.runNext();
@@ -58,47 +63,13 @@ class JobRunnerApiProfileIntegrationTest {
             // then
             assertThat(ran).isTrue();
             assertThat(jobQueryService.getJob(jobId).status()).isEqualTo(JobStatus.SUCCEEDED);
-            verify(setupJobHandler).handle(any());
+            verify(specLoadJobHandler).handle(any());
         }
 
         @Test
-        void AUTO_RUN_작업은_집지_않고_대기로_남긴다() {
+        void QA_준비_작업을_집어_실행한다() {
             // given
-            long jobId = jobCommandService.enqueue(JobType.AUTO_RUN, null, Map.of());
-
-            // when
-            boolean ran = jobRunner.runNext();
-
-            // then
-            assertThat(ran).isFalse();
-            assertSoftly(softly -> {
-                softly.assertThat(jobQueryService.getJob(jobId).status()).isEqualTo(JobStatus.QUEUED);
-                softly.assertThat(jobQueryService.getJob(jobId).attempt()).isZero();
-            });
-        }
-
-        @Test
-        void 처리기가_없는_REVIEW_COLLECT와_EVIDENCE_CLEANUP_작업은_집지_않는다() {
-            // given
-            long reviewJobId = jobCommandService.enqueue(JobType.REVIEW_COLLECT, null, Map.of());
-            long cleanupJobId = jobCommandService.enqueue(JobType.EVIDENCE_CLEANUP, null, Map.of());
-
-            // when
-            boolean ran = jobRunner.runNext();
-
-            // then
-            assertThat(ran).isFalse();
-            assertSoftly(softly -> {
-                softly.assertThat(jobQueryService.getJob(reviewJobId).status()).isEqualTo(JobStatus.QUEUED);
-                softly.assertThat(jobQueryService.getJob(cleanupJobId).status()).isEqualTo(JobStatus.QUEUED);
-            });
-        }
-
-        @Test
-        void AUTO_RUN이_먼저_대기_중이어도_뒤의_SETUP을_집는다() {
-            // given
-            long autoRunJobId = jobCommandService.enqueue(JobType.AUTO_RUN, null, Map.of());
-            long setupJobId = jobCommandService.enqueue(JobType.SETUP, null, Map.of());
+            long jobId = jobCommandService.enqueue(JobType.QA_PREPARE, null, Map.of());
 
             // when
             boolean ran = jobRunner.runNext();
@@ -106,9 +77,10 @@ class JobRunnerApiProfileIntegrationTest {
             // then
             assertThat(ran).isTrue();
             assertSoftly(softly -> {
-                softly.assertThat(jobQueryService.getJob(setupJobId).status()).isEqualTo(JobStatus.SUCCEEDED);
-                softly.assertThat(jobQueryService.getJob(autoRunJobId).status()).isEqualTo(JobStatus.QUEUED);
+                softly.assertThat(jobQueryService.getJob(jobId).status()).isEqualTo(JobStatus.SUCCEEDED);
+                softly.assertThat(jobQueryService.getJob(jobId).attempt()).isEqualTo(1);
             });
+            verify(qaPrepareJobHandler).handle(any());
         }
     }
 }

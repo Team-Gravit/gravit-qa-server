@@ -2,22 +2,18 @@ package gravit.qa.sprint.service;
 
 import gravit.qa.adapter.notion.dto.internal.NotionSprintDto;
 import gravit.qa.global.exception.domain.RestApiException;
-import gravit.qa.sprint.domain.Baseline;
-import gravit.qa.sprint.domain.BaselineRepo;
-import gravit.qa.sprint.domain.PrepareFailureReason;
 import gravit.qa.sprint.domain.Sprint;
-import gravit.qa.sprint.dto.internal.SetupBaselineDto;
+import gravit.qa.sprint.domain.SprintConnection;
+import gravit.qa.sprint.domain.SprintStatus;
+import gravit.qa.sprint.dto.internal.ConnectionResultDto;
 import gravit.qa.sprint.dto.internal.SprintDto;
-import gravit.qa.sprint.dto.internal.WarningDto;
-import gravit.qa.sprint.repository.BaselineRepoRepository;
-import gravit.qa.sprint.repository.BaselineRepository;
+import gravit.qa.sprint.repository.SprintConnectionRepository;
 import gravit.qa.sprint.repository.SprintRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -29,8 +25,7 @@ import static gravit.qa.global.exception.domain.CustomErrorCode.SPRINT_NOT_FOUND
 public class SprintCommandService {
 
     private final SprintRepository sprintRepository;
-    private final BaselineRepository baselineRepository;
-    private final BaselineRepoRepository baselineRepoRepository;
+    private final SprintConnectionRepository sprintConnectionRepository;
 
     @Transactional
     public SprintDto create(
@@ -45,8 +40,7 @@ public class SprintCommandService {
         Sprint sprint = Sprint.create(
                 notionSprint.name(),
                 notionSprint.pageId(),
-                notionSprint.periodStart(),
-                notionSprint.periodEnd(),
+                notionSprint.changeSummary(),
                 figmaFileKey,
                 adminId
         );
@@ -58,51 +52,49 @@ public class SprintCommandService {
     }
 
     @Transactional
-    public void startPreparing(long sprintId) {
-        findSprint(sprintId).startPreparing();
-    }
-
-    @Transactional
-    public void markPrepareFailed(
+    public void requireVersion(
             long sprintId,
-            PrepareFailureReason reason
+            int version
     ) {
-        sprintRepository.findById(sprintId).ifPresent(sprint -> sprint.failPreparation(reason));
+        findSprint(sprintId).requireVersion(version);
     }
 
     @Transactional
-    public void applyPreparation(
+    public void startSpecLoad(
             long sprintId,
-            SetupBaselineDto baseline,
-            LocalDate periodStart,
-            LocalDate periodEnd,
+            int version
+    ) {
+        Sprint sprint = findSprint(sprintId);
+        sprint.requireVersion(version);
+        sprint.startSpecLoad();
+    }
+
+    @Transactional
+    public void applyConnect(
+            long sprintId,
+            String changeSummary,
             String figmaFileKey,
-            List<WarningDto> setupWarnings,
+            List<ConnectionResultDto> connections,
+            boolean notionConnected,
             LocalDateTime now
     ) {
-        findSprint(sprintId).completePreparation(periodStart, periodEnd, figmaFileKey, setupWarnings, now);
+        Sprint sprint = findSprint(sprintId);
+        if (notionConnected) {
+            sprint.applyNotionSprint(changeSummary, figmaFileKey);
+        }
 
-        Baseline saved = baselineRepository.findBySprintId(sprintId)
-                .map(existing -> {
-                    existing.replace(baseline.previousBaselineId(), now);
-                    return existing;
-                })
-                .orElseGet(() -> baselineRepository.save(Baseline.create(sprintId, baseline.previousBaselineId(), now)));
-
-        long baselineId = saved.getId();
-        baselineRepoRepository.deleteAllByBaselineId(baselineId);
-        baselineRepoRepository.saveAll(baseline.repos().stream()
-                .map(repo -> BaselineRepo.create(baselineId, repo))
+        sprintConnectionRepository.deleteAllBySprintId(sprintId);
+        sprintConnectionRepository.saveAll(connections.stream()
+                .map(connection -> SprintConnection.create(sprintId, connection, now))
                 .toList());
     }
 
     @Transactional
-    public void confirm(
+    public void advanceFrom(
             long sprintId,
-            int version,
-            LocalDateTime now
+            SprintStatus current
     ) {
-        findSprint(sprintId).confirm(version, now);
+        findSprint(sprintId).advanceFrom(current);
     }
 
     @Transactional
@@ -112,14 +104,6 @@ public class SprintCommandService {
             LocalDateTime now
     ) {
         findSprint(sprintId).close(version, now);
-    }
-
-    @Transactional
-    public void addWarning(
-            long sprintId,
-            WarningDto warning
-    ) {
-        findSprint(sprintId).addWarning(warning);
     }
 
     private Sprint findSprint(long sprintId) {

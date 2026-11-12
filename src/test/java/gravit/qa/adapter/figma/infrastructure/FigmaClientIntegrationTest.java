@@ -1,8 +1,8 @@
 package gravit.qa.adapter.figma.infrastructure;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import gravit.qa.adapter.exception.NonRetryableExternalApiException;
 import gravit.qa.adapter.figma.dto.internal.FigmaFrameDto;
-import gravit.qa.adapter.figma.dto.internal.FigmaFrameImagesDto;
 import gravit.qa.adapter.figma.dto.internal.FigmaFrameWarningDto;
 import gravit.qa.adapter.figma.dto.internal.FigmaQaFramesDto;
 import gravit.qa.adapter.figma.dto.internal.FigmaScreenDto;
@@ -19,13 +19,13 @@ import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 
 import static gravit.qa.adapter.figma.domain.FigmaFrameWarningType.NESTED_SECTION;
 import static gravit.qa.adapter.figma.domain.FigmaFrameWarningType.QA_PAGE_NOT_FOUND;
 import static gravit.qa.adapter.figma.domain.FigmaFrameWarningType.UNCONFIRMED_FRAME;
 import static gravit.qa.adapter.figma.domain.FigmaPlatform.AOS;
 import static gravit.qa.adapter.figma.domain.FigmaPlatform.WEB;
-import static gravit.qa.support.HttpStubServer.StubResponse.bytes;
 import static gravit.qa.support.HttpStubServer.StubResponse.json;
 import static gravit.qa.support.HttpStubServer.StubResponse.status;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -39,7 +39,6 @@ class FigmaClientIntegrationTest {
     private static final String FILE_KEY = "AbC123";
     private static final String FILE_PATH = "/v1/files/" + FILE_KEY;
     private static final String NODES_PATH = "/v1/files/" + FILE_KEY + "/nodes";
-    private static final String IMAGES_PATH = "/v1/images/" + FILE_KEY;
     private static final String FILE_BODY = """
             {"name": "Gravit", "document": {"id": "0:0", "type": "DOCUMENT", "children": [
               {"id": "0:1", "name": "Screen Design", "type": "CANVAS"},
@@ -143,29 +142,26 @@ class FigmaClientIntegrationTest {
     }
 
     @Nested
-    @DisplayName("프레임 PNG를 내보낼 때")
-    class PNG_내보내기 {
+    @DisplayName("프레임 레이어를 읽을 때")
+    class 프레임_레이어 {
 
         @Test
-        void 렌더된_이미지를_토큰_없이_내려받고_실패한_노드는_따로_돌려준다() {
+        void 깊이_제한_없이_노드를_묶어_조회하고_중복_ID는_한_번만_보낸다() {
             // given
-            byte[] png = {(byte) 0x89, 'P', 'N', 'G'};
-            String imageUrl = externalApiStubServer.baseUrl() + "/s3/4-2.png";
-            externalApiStubServer.stub("GET", IMAGES_PATH, json(200, "{\"err\": null, \"images\": {\"4:2\": \"" + imageUrl + "\", \"5:2\": null}}"));
-            externalApiStubServer.stub("GET", "/s3/4-2.png", bytes("image/png", png));
+            externalApiStubServer.stub("GET", NODES_PATH, json(200, """
+                    {"nodes": {
+                      "4:2": {"document": {"id": "4:2", "name": "LRN-02", "type": "FRAME", "children": []}},
+                      "5:2": {"document": {"id": "5:2", "name": "LRN-02", "type": "FRAME", "children": []}}
+                    }}
+                    """));
 
             // when
-            FigmaFrameImagesDto images = figmaClient.exportPng(FILE_KEY, List.of("4:2", "5:2", "4:2"));
+            Map<String, JsonNode> nodeIdToNode = figmaClient.getFrameNodes(FILE_KEY, List.of("4:2", "5:2", "4:2"));
 
             // then
-            RecordedRequest download = externalApiStubServer.requests("GET", "/s3/4-2.png").getFirst();
             assertSoftly(softly -> {
-                softly.assertThat(images.nodeIdToPng()).containsOnlyKeys("4:2");
-                softly.assertThat(images.nodeIdToPng().get("4:2")).isEqualTo(png);
-                softly.assertThat(images.failedNodeIds()).containsExactly("5:2");
-                softly.assertThat(decodedQuery(externalApiStubServer.requests("GET", IMAGES_PATH).getFirst()))
-                        .isEqualTo("ids=4:2,5:2&format=png&scale=1");
-                softly.assertThat(download.hasHeader("X-Figma-Token")).isFalse();
+                softly.assertThat(nodeIdToNode).containsOnlyKeys("4:2", "5:2");
+                softly.assertThat(decodedQuery(externalApiStubServer.requests().getFirst())).isEqualTo("ids=4:2,5:2");
             });
         }
     }

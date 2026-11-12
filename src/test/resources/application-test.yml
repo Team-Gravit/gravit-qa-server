@@ -5,8 +5,8 @@ qa:
     enabled: false
     id: test-worker
     job-types:
-      - REVIEW_COLLECT
-      - SETUP
+      - SPEC_LOAD
+      - QA_PREPARE
   adapter:
     github:
       token: test-github-token

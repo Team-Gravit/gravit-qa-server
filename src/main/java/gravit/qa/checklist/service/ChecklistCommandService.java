@@ -4,10 +4,8 @@ import gravit.qa.checklist.domain.CellState;
 import gravit.qa.checklist.domain.CheckCell;
 import gravit.qa.checklist.domain.CheckCellHistory;
 import gravit.qa.checklist.domain.ChecklistItem;
-import gravit.qa.checklist.domain.Classification;
-import gravit.qa.checklist.domain.ReviewState;
+import gravit.qa.checklist.dto.internal.CellJudgmentDto;
 import gravit.qa.checklist.dto.internal.ChecklistItemDraftDto;
-import gravit.qa.checklist.dto.internal.ChecklistProposalDto;
 import gravit.qa.checklist.dto.request.CheckCellUpdateRequest;
 import gravit.qa.checklist.dto.request.ChecklistItemCreateRequest;
 import gravit.qa.checklist.dto.request.ChecklistItemUpdateRequest;
@@ -16,15 +14,12 @@ import gravit.qa.checklist.dto.response.ChecklistItemResponse;
 import gravit.qa.checklist.repository.CheckCellHistoryRepository;
 import gravit.qa.checklist.repository.CheckCellRepository;
 import gravit.qa.checklist.repository.ChecklistItemRepository;
-import gravit.qa.checklist.service.port.TestCatalog;
 import gravit.qa.checklist.support.CheckCellEditPolicy;
 import gravit.qa.feature.domain.Part;
 import gravit.qa.global.exception.domain.RestApiException;
 import gravit.qa.global.util.KstTimes;
-import gravit.qa.persona.domain.PersonaKey;
 import gravit.qa.sprint.domain.SprintStatus;
 import lombok.RequiredArgsConstructor;
-import org.openapitools.jackson.nullable.JsonNullable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,52 +28,45 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 import static gravit.qa.global.exception.domain.CustomErrorCode.CHECKLIST_ITEM_NOT_FOUND;
 import static gravit.qa.global.exception.domain.CustomErrorCode.CHECK_CELL_NOT_FOUND;
 import static gravit.qa.global.exception.domain.CustomErrorCode.CHECK_CELL_STATE_INVALID;
-import static gravit.qa.global.exception.domain.CustomErrorCode.INVALID_PARAMS;
-import static gravit.qa.global.exception.domain.CustomErrorCode.PERSONA_KEY_UNKNOWN;
-import static gravit.qa.global.exception.domain.CustomErrorCode.TEST_REF_NOT_IN_CATALOG;
 
 @Service
 @RequiredArgsConstructor
 public class ChecklistCommandService {
 
+    public static final String EDIT_RESET_REASON = "항목 수정으로 판정 초기화";
+
     private final ChecklistItemRepository checklistItemRepository;
     private final CheckCellRepository checkCellRepository;
     private final CheckCellHistoryRepository checkCellHistoryRepository;
 
-    private final TestCatalog testCatalog;
-
     private final Clock clock;
 
     @Transactional
-    public void replaceProposed(
+    public void saveGenerated(
             long sprintId,
-            List<ChecklistProposalDto> proposals
+            long featureId,
+            List<ChecklistItemDraftDto> drafts,
+            List<Long> sourceRefs
     ) {
-        checklistItemRepository.deleteProposed(sprintId, ReviewState.PROPOSED);
-
-        for (ChecklistProposalDto proposal : proposals) {
-            int sortOrder = checklistItemRepository.findMaxSortOrder(sprintId, proposal.featureId()) + 1;
-            for (ChecklistItemDraftDto draft : proposal.drafts()) {
-                ChecklistItem item = checklistItemRepository.save(ChecklistItem.propose(sprintId, proposal.featureId(), draft, proposal.sourceRefs(), sortOrder++));
-                checkCellRepository.saveAll(CheckCell.initialize(item.getId(), item.getParts()));
-            }
+        int sortOrder = checklistItemRepository.findMaxSortOrder(sprintId, featureId) + 1;
+        for (ChecklistItemDraftDto draft : drafts) {
+            ChecklistItem item = checklistItemRepository.save(ChecklistItem.generate(sprintId, featureId, draft, sourceRefs, sortOrder++));
+            checkCellRepository.saveAll(CheckCell.initialize(item.getId(), item.getParts()));
         }
     }
 
     @Transactional
     public ChecklistItemResponse createItem(
             long sprintId,
-            ChecklistItemCreateRequest request
+            ChecklistItemCreateRequest request,
+            SprintStatus sprintStatus
     ) {
-        validatePersonaKey(request.personaKey());
-        validateTestRef(request.testRef());
-        validateAutoTestRef(request.classification(), request.testRef());
-
         int sortOrder = checklistItemRepository.findMaxSortOrder(sprintId, request.featureId()) + 1;
         ChecklistItem item = checklistItemRepository.save(ChecklistItem.createByHuman(
                 sprintId,
@@ -87,60 +75,65 @@ public class ChecklistCommandService {
                 request.expected().trim(),
                 List.copyOf(request.parts()),
                 request.classification(),
-                request.testRef(),
-                request.personaKey(),
                 sortOrder
         ));
         List<CheckCell> cells = checkCellRepository.saveAll(CheckCell.initialize(item.getId(), item.getParts()));
         checklistItemRepository.flush();
 
-        return toResponse(item, cells, SprintStatus.REVIEW);
+        return toResponse(item, cells, sprintStatus);
     }
 
     @Transactional
     public ChecklistItemResponse updateItem(
             long itemId,
             ChecklistItemUpdateRequest request,
-            long adminId
+            long adminId,
+            SprintStatus sprintStatus
     ) {
         ChecklistItem item = findItem(itemId);
         item.requireVersion(request.version());
 
-        if (request.title() != null) {
+        boolean contentChanged = false;
+        if (request.title() != null && !request.title().trim().equals(item.getTitle())) {
             item.changeTitle(request.title().trim());
+            contentChanged = true;
         }
-        if (request.expected() != null) {
+        if (request.expected() != null && !request.expected().trim().equals(item.getExpected())) {
             item.changeExpected(request.expected().trim());
+            contentChanged = true;
         }
-        if (isPresent(request.personaKey())) {
-            String personaKey = request.personaKey().get();
-            validatePersonaKey(personaKey);
-            item.changePersonaKey(personaKey);
-        }
-        if (isPresent(request.testRef())) {
-            String testRef = request.testRef().get();
-            validateTestRef(testRef);
-            item.changeTestRef(testRef);
-        }
-        if (request.classification() != null) {
+        if (request.classification() != null && request.classification() != item.getClassification()) {
             item.changeClassification(request.classification());
+            contentChanged = true;
         }
-        if (request.reviewState() != null) {
-            if (request.reviewState() == ReviewState.PROPOSED) {
-                throw new RestApiException(INVALID_PARAMS);
-            }
-            item.review(request.reviewState());
-        }
-        validateAutoTestRef(item.getClassification(), item.getTestRef());
 
+        LocalDateTime now = now();
         List<CheckCell> cells = checkCellRepository.findAllByItemId(itemId);
+        List<CheckCellHistory> histories = new ArrayList<>();
         if (request.parts() != null && !Set.copyOf(item.getParts()).equals(request.parts())) {
             item.changeParts(List.copyOf(request.parts()));
-            applyParts(item, cells, adminId);
+            cells.forEach(cell -> cell.applyParts(item.getParts(), EDIT_RESET_REASON, adminId, now).ifPresent(histories::add));
+            contentChanged = true;
         }
+        if (contentChanged) {
+            cells.forEach(cell -> cell.resetJudgment(EDIT_RESET_REASON, adminId, now).ifPresent(histories::add));
+        }
+        checkCellHistoryRepository.saveAll(histories);
         checklistItemRepository.flush();
 
-        return toResponse(item, cells, SprintStatus.REVIEW);
+        return toResponse(item, cells, sprintStatus);
+    }
+
+    @Transactional
+    public void deleteItem(
+            long itemId,
+            int version
+    ) {
+        ChecklistItem item = findItem(itemId);
+        item.requireVersion(version);
+
+        checklistItemRepository.delete(item);
+        checklistItemRepository.flush();
     }
 
     @Transactional
@@ -148,16 +141,16 @@ public class ChecklistCommandService {
             long itemId,
             Part part,
             CheckCellUpdateRequest request,
-            long adminId
+            long adminId,
+            SprintStatus sprintStatus
     ) {
         if (request.state() == CellState.NOT_APPLICABLE) {
             throw new RestApiException(CHECK_CELL_STATE_INVALID);
         }
 
-        ChecklistItem item = findItem(itemId);
-        CheckCell cell = checkCellRepository.findByItemIdAndPart(itemId, part)
-                .orElseThrow(() -> new RestApiException(CHECK_CELL_NOT_FOUND));
-        CheckCellEditPolicy.requireEditable(item.getClassification(), item.getReviewState(), part, cell.getState());
+        findItem(itemId);
+        CheckCell cell = findCell(itemId, part);
+        CheckCellEditPolicy.requireEditable(cell.getState());
         cell.requireVersion(request.version());
 
         if (cell.getState() != request.state()) {
@@ -165,56 +158,33 @@ public class ChecklistCommandService {
             checkCellRepository.flush();
         }
 
-        return CheckCellResponse.of(cell, CheckCellEditPolicy.isEditable(
-                SprintStatus.IN_PROGRESS,
-                item.getClassification(),
-                item.getReviewState(),
-                part,
-                cell.getState()
-        ));
+        return CheckCellResponse.of(cell, CheckCellEditPolicy.isEditable(sprintStatus, cell.getState()));
     }
 
-    private void applyParts(
-            ChecklistItem item,
-            List<CheckCell> cells,
-            long adminId
-    ) {
+    @Transactional
+    public void judgeCells(List<CellJudgmentDto> judgments) {
         LocalDateTime now = now();
         List<CheckCellHistory> histories = new ArrayList<>();
-        for (CheckCell cell : cells) {
-            cell.applyParts(item.getParts(), adminId, now).ifPresent(histories::add);
+        for (CellJudgmentDto judgment : judgments) {
+            CheckCell cell = findCell(judgment.itemId(), judgment.part());
+            if (cell.isApplicable()) {
+                histories.add(cell.judge(judgment.state(), judgment.reason(), now));
+            }
         }
         checkCellHistoryRepository.saveAll(histories);
-    }
-
-    private void validatePersonaKey(String personaKey) {
-        if (personaKey != null && !PersonaKey.isKnown(personaKey)) {
-            throw new RestApiException(PERSONA_KEY_UNKNOWN);
-        }
-    }
-
-    private void validateTestRef(String testRef) {
-        if (testRef != null && !testCatalog.contains(testRef)) {
-            throw new RestApiException(TEST_REF_NOT_IN_CATALOG);
-        }
-    }
-
-    private void validateAutoTestRef(
-            Classification classification,
-            String testRef
-    ) {
-        if (classification == Classification.AUTO && !testCatalog.contains(testRef)) {
-            throw new RestApiException(TEST_REF_NOT_IN_CATALOG);
-        }
-    }
-
-    private boolean isPresent(JsonNullable<String> value) {
-        return value != null && value.isPresent();
     }
 
     private ChecklistItem findItem(long itemId) {
         return checklistItemRepository.findById(itemId)
                 .orElseThrow(() -> new RestApiException(CHECKLIST_ITEM_NOT_FOUND));
+    }
+
+    private CheckCell findCell(
+            long itemId,
+            Part part
+    ) {
+        return checkCellRepository.findByItemIdAndPart(itemId, part)
+                .orElseThrow(() -> new RestApiException(CHECK_CELL_NOT_FOUND));
     }
 
     private ChecklistItemResponse toResponse(
@@ -223,14 +193,9 @@ public class ChecklistCommandService {
             SprintStatus sprintStatus
     ) {
         List<CheckCellResponse> cellResponses = cells.stream()
+                .filter(Objects::nonNull)
                 .sorted(Comparator.comparing(CheckCell::getPart))
-                .map(cell -> CheckCellResponse.of(cell, CheckCellEditPolicy.isEditable(
-                        sprintStatus,
-                        item.getClassification(),
-                        item.getReviewState(),
-                        cell.getPart(),
-                        cell.getState()
-                )))
+                .map(cell -> CheckCellResponse.of(cell, CheckCellEditPolicy.isEditable(sprintStatus, cell.getState())))
                 .toList();
         return ChecklistItemResponse.of(item, cellResponses);
     }

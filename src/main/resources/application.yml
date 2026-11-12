@@ -57,6 +57,7 @@ qa:
       base-url: https://api.github.com
       token: ${GITHUB_TOKEN:}
       owner: Team-Gravit
+      qa-branch: qa-baseline
       timeout: 10s
     notion:
       base-url: https://api.notion.com
@@ -80,7 +81,11 @@ qa:
       max-requests-per-minute: 5
       max-output-retries: 2
       max-consecutive-rate-limits: 2
-  setup:
-    max-prompt-chars: 30000
+  prepare:
+    reflection-max-prompt-chars: 30000
+    checklist-max-prompt-chars: 30000
+    design-review-max-prompt-chars: 60000
+    auto-review-max-prompt-chars: 80000
+    auto-review-max-chunks: 4
   storage:
     root: /data/evidence

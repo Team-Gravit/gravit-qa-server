@@ -9,21 +9,26 @@ import gravit.qa.checklist.dto.response.ChecklistItemResponse;
 import gravit.qa.checklist.facade.ChecklistFacade;
 import gravit.qa.checklist.service.ChecklistQueryService;
 import gravit.qa.feature.domain.Part;
+import gravit.qa.global.exception.domain.RestApiException;
 import gravit.qa.security.principal.LoginAdmin;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+import static gravit.qa.global.exception.domain.CustomErrorCode.INVALID_PARAMS;
+import static org.springframework.http.HttpStatus.NO_CONTENT;
 import static org.springframework.http.HttpStatus.OK;
 
 @RestController
@@ -42,6 +47,18 @@ public class ChecklistItemController implements ChecklistItemControllerDocs {
             @AuthenticationPrincipal LoginAdmin loginAdmin
     ) {
         return ResponseEntity.status(OK).body(checklistFacade.updateItem(itemId, request, loginAdmin.adminId()));
+    }
+
+    @DeleteMapping("/{itemId}")
+    public ResponseEntity<Void> deleteChecklistItem(
+            @PathVariable("itemId") long itemId,
+            @RequestParam(name = "version", required = false) Integer version
+    ) {
+        if (version == null) {
+            throw new RestApiException(INVALID_PARAMS);
+        }
+        checklistFacade.deleteItem(itemId, version);
+        return ResponseEntity.status(NO_CONTENT).build();
     }
 
     @PutMapping("/{itemId}/cells/{part}")

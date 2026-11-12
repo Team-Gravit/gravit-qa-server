@@ -1,22 +1,15 @@
 package gravit.qa.sprint.dto.response;
 
-import gravit.qa.checklist.dto.response.PartProgressResponse;
-import gravit.qa.global.util.KstTimes;
+import gravit.qa.job.dto.response.JobResponse;
 import gravit.qa.sprint.domain.SprintStatus;
 import gravit.qa.sprint.dto.internal.SprintDto;
 import io.swagger.v3.oas.annotations.media.Schema;
 
-import java.time.LocalDate;
-import java.time.OffsetDateTime;
 import java.util.List;
 
 public record SprintResponse(
-        @Schema(requiredMode = Schema.RequiredMode.REQUIRED)
-        SprintGuideResponse guide,
-
         @Schema(
                 description = "스프린트 ID",
-                example = "1",
                 requiredMode = Schema.RequiredMode.REQUIRED
         )
         long id,
@@ -28,90 +21,65 @@ public record SprintResponse(
         )
         String sprintKey,
 
-        @Schema(description = "기간 시작일")
-        LocalDate periodStart,
-
-        @Schema(description = "기간 종료일")
-        LocalDate periodEnd,
+        @Schema(description = "Notion 스프린트 '변경 요약'. 비어 있으면 null")
+        String summary,
 
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED)
         SprintStatus status,
-
-        @Schema(requiredMode = Schema.RequiredMode.REQUIRED)
-        List<PartProgressResponse> progress,
-
-        @Schema(
-                description = "Notion 스프린트 행 페이지 ID",
-                requiredMode = Schema.RequiredMode.REQUIRED
-        )
-        String notionPageId,
-
-        @Schema(description = "Figma 파일 키")
-        String figmaFileKey,
-
-        @Schema(description = "기준점. 준비 전이면 null")
-        BaselineResponse baseline,
-
-        @Schema(description = "마지막 셋업 작업 ID")
-        Long latestSetupJobId,
-
-        @Schema(
-                description = "스프린트 경고. 준비 중 읽지 못한 기능 명세(SPEC_READ_FAILED), 종료 시 Notion 기록 실패(NOTION_WRITE_FAILED)",
-                requiredMode = Schema.RequiredMode.REQUIRED
-        )
-        List<WarningResponse> warnings,
-
-        @Schema(description = "준비 완료 시각")
-        OffsetDateTime preparedAt,
-
-        @Schema(description = "분류 확정 시각")
-        OffsetDateTime confirmedAt,
-
-        @Schema(description = "종료 시각")
-        OffsetDateTime closedAt,
-
-        @Schema(requiredMode = Schema.RequiredMode.REQUIRED)
-        OffsetDateTime createdAt,
-
-        @Schema(
-                description = "/admin/me의 adminId",
-                requiredMode = Schema.RequiredMode.REQUIRED
-        )
-        long createdBy,
 
         @Schema(
                 description = "낙관적 잠금 값",
                 requiredMode = Schema.RequiredMode.REQUIRED
         )
-        int version
+        int version,
+
+        @Schema(
+                description = "연결 상태. 준비 작업 전이면 빈 배열",
+                requiredMode = Schema.RequiredMode.REQUIRED
+        )
+        List<ConnectionResponse> connections,
+
+        @Schema(
+                description = "파트별 진행도(DESIGN, WEB, APP, SERVER)",
+                requiredMode = Schema.RequiredMode.REQUIRED
+        )
+        List<PartProgressResponse> progress,
+
+        @Schema(
+                description = "준비 작업 5단계",
+                requiredMode = Schema.RequiredMode.REQUIRED
+        )
+        List<SetupStepResponse> setupSteps,
+
+        @Schema(description = "이 스프린트의 마지막 작업. 없으면 null")
+        JobResponse latestJob,
+
+        @Schema(
+                description = "처리하지 않은 수정 이력 반영 제안 수(PENDING, FAILED, APPROVED)",
+                requiredMode = Schema.RequiredMode.REQUIRED
+        )
+        long pendingReflectionCount
 ) {
 
     public static SprintResponse of(
             SprintDto sprint,
+            List<ConnectionResponse> connections,
             List<PartProgressResponse> progress,
-            SprintGuideResponse guide,
-            BaselineResponse baseline,
-            Long latestSetupJobId
+            List<SetupStepResponse> setupSteps,
+            JobResponse latestJob,
+            long pendingReflectionCount
     ) {
         return new SprintResponse(
-                guide,
                 sprint.id(),
                 sprint.sprintKey(),
-                sprint.periodStart(),
-                sprint.periodEnd(),
+                SprintSummaryResponse.summaryOf(sprint.changeSummary()),
                 sprint.status(),
+                sprint.version(),
+                List.copyOf(connections),
                 List.copyOf(progress),
-                sprint.notionPageId(),
-                sprint.figmaFileKey(),
-                baseline,
-                latestSetupJobId,
-                sprint.warnings().stream().map(WarningResponse::from).toList(),
-                KstTimes.toOffset(sprint.preparedAt()),
-                KstTimes.toOffset(sprint.confirmedAt()),
-                KstTimes.toOffset(sprint.closedAt()),
-                KstTimes.toOffset(sprint.createdAt()),
-                sprint.createdBy(),
-                sprint.version()
+                List.copyOf(setupSteps),
+                latestJob,
+                pendingReflectionCount
         );
     }
 }

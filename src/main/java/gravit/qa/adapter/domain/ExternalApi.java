@@ -10,7 +10,6 @@ public enum ExternalApi {
     GITHUB("GitHub"),
     NOTION("Notion"),
     FIGMA("Figma"),
-    FIGMA_IMAGE("Figma 이미지"),
     OPENAPI("dev OpenAPI"),
     LLM("LLM");
 

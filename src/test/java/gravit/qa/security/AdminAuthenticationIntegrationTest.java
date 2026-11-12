@@ -56,7 +56,7 @@ class AdminAuthenticationIntegrationTest {
         @Test
         void 인증_서버가_200이면_요청이_통과하고_토큰을_그대로_전달한다() throws Exception {
             // given
-            long jobId = jobCommandService.enqueue(JobType.REVIEW_COLLECT, null, Map.of());
+            long jobId = jobCommandService.enqueue(JobType.SPEC_LOAD, null, Map.of());
 
             // when & then
             mockMvc.perform(get("/api/v1/jobs/" + jobId).header("Authorization", BEARER))

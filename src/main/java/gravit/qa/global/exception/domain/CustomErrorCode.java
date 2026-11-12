@@ -42,8 +42,7 @@ public enum CustomErrorCode implements ErrorCode {
     NOTION_SPRINT_PAGE_NOT_FOUND(NOT_FOUND, "SPRINT_4042", "Notion 스프린트 페이지를 찾을 수 없습니다. 페이지에 Integration이 연결되어 있는지 확인하세요."),
     SPRINT_ALREADY_REGISTERED(CONFLICT, "SPRINT_4091", "이미 등록된 Notion 스프린트입니다."),
     SPRINT_STATUS_CONFLICT(CONFLICT, "SPRINT_4092", "현재 스프린트 상태에서는 할 수 없는 작업입니다."),
-    SPRINT_UNCHECKED_CELLS_REMAIN(CONFLICT, "SPRINT_4093", "미검수 셀이 남아 있어 종료할 수 없습니다."),
-    SPRINT_AUTO_RUN_IN_PROGRESS(CONFLICT, "SPRINT_4094", "실행 중인 자동 실행이 있어 종료할 수 없습니다."),
+    SPRINT_UNCHECKED_CELLS_REMAIN(CONFLICT, "SPRINT_4093", "미검수 항목이 남아 있어 종료할 수 없습니다."),
     NOTION_UNAVAILABLE(BAD_GATEWAY, "SPRINT_5021", "Notion에서 스프린트를 가져오지 못했습니다. 잠시 뒤 다시 시도하세요."),
 
     // Checklist
@@ -51,10 +50,16 @@ public enum CustomErrorCode implements ErrorCode {
     CHECKLIST_ITEM_NOT_FOUND(NOT_FOUND, "CHECKLIST_4041", "존재하지 않는 체크 항목입니다."),
     CHECKLIST_FEATURE_NOT_IN_SPRINT(NOT_FOUND, "CHECKLIST_4042", "스프린트 대상 기능이 아닙니다."),
     CHECK_CELL_NOT_FOUND(NOT_FOUND, "CHECKLIST_4043", "존재하지 않는 체크 셀입니다."),
-    CHECKLIST_ITEMS_NOT_REVIEWED(CONFLICT, "CHECKLIST_4091", "검토하지 않은 체크 항목이 남아 있습니다."),
-    TEST_REF_NOT_IN_CATALOG(UNPROCESSABLE_ENTITY, "CHECKLIST_4221", "테스트 카탈로그에 없는 testRef입니다. 자동 항목에는 카탈로그의 테스트가 있어야 합니다."),
-    PERSONA_KEY_UNKNOWN(UNPROCESSABLE_ENTITY, "CHECKLIST_4222", "알 수 없는 페르소나 키입니다."),
-    CHECK_CELL_LOCKED(UNPROCESSABLE_ENTITY, "CHECKLIST_4223", "수동으로 바꿀 수 없는 셀입니다.");
+    CHECK_CELL_LOCKED(UNPROCESSABLE_ENTITY, "CHECKLIST_4223", "해당 없는(NOT_APPLICABLE) 셀은 바꿀 수 없습니다."),
+
+    // Design Review
+    DESIGN_REVIEW_ITEM_NOT_FOUND(NOT_FOUND, "DESIGN_4041", "존재하지 않는 디자인 검수 항목입니다."),
+    DESIGN_REVIEW_STATE_INVALID(BAD_REQUEST, "DESIGN_4001", "디자인 검수 항목은 UNCHECKED, PASS, FAIL로만 바꿀 수 있습니다."),
+
+    // Reflection
+    REFLECTION_NOT_FOUND(NOT_FOUND, "REFLECTION_4041", "존재하지 않는 반영 제안입니다."),
+    REFLECTION_SPEC_CHANGED(CONFLICT, "REFLECTION_4091", "제안을 만든 뒤 Notion 명세가 바뀌었습니다. 명세를 다시 수집하세요."),
+    REFLECTION_NOTION_WRITE_FAILED(BAD_GATEWAY, "REFLECTION_5021", "Notion 명세를 읽거나 반영하지 못했습니다. 잠시 뒤 다시 시도하세요.");
 
     private final HttpStatus httpStatus;
     private final String code;

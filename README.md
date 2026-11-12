@@ -1,22 +1,23 @@
 # gravit-qa-server
 
-Gravit QA 플랫폼(서비스명 gravit-qa) 백엔드. 백오피스(gravit-admin-web) QA 메뉴의 API와 QA 작업(준비·자동 실행·리뷰 수집)을 담당한다.
+Gravit QA 플랫폼(서비스명 gravit-qa) 백엔드. 백오피스(gravit-admin-web) QA 메뉴의 API와 QA 준비 작업(명세 로드, 수정 이력 반영, 체크리스트 생성, 디자인 검수, 1차 자동화 검수)을 담당한다.
 
 - 설계: [`docs/design/03_DESIGN.md`](docs/design/03_DESIGN.md)
-- API 계약(OpenAPI 초안): [`docs/api/openapi.yaml`](docs/api/openapi.yaml)
+- API 계약: [`docs/api/openapi.yaml`](docs/api/openapi.yaml)
+- QA 흐름 정책: [`.claude/spec/qa-policy/`](.claude/spec/qa-policy/README.md)
 - 개발 하네스: [`.claude/CLAUDE.md`](.claude/CLAUDE.md)
 
-## 현재 범위 (C2 골격)
+## 현재 범위 (QA 흐름 재설계, 2026-11)
 
 | 구성 | 상태 |
 |---|---|
-| Flyway 스키마 `V1` (설계 4절 전체 테이블) | 완료 |
-| 관리자 인증: `/admin/me` 판정 필터 + 성공 300초 캐시, 200/401/403/503 매핑 | 완료 |
+| 관리자 인증: `/admin/me` 판정 필터 + 성공 300초 캐시 | 완료 |
 | 작업 큐: 등록·점유(`SKIP LOCKED`)·단계 기록·취소·재시도(2→4→8분)·heartbeat 회수 | 완료 |
-| `GET /api/v1/jobs/{id}`, `POST /api/v1/jobs/{id}/cancel` | 완료 |
-| 외부 수집 어댑터: GitHub, Notion, Figma, dev OpenAPI, LLM(litellm-gw) + 공통 재시도 규칙 | 완료 (C3) |
-| 스냅샷 파일 저장소, AOS 버전 파서 | 완료 (C3) |
-| 스프린트·체크리스트·실행·증적·페르소나 API, 셋업 작업 처리기 | C4 이후 |
+| 명세 로드(`SPEC_LOAD`): 연결(Notion, Figma, 세 저장소 `qa-baseline`), 명세 수집, 수정 이력 반영 제안 | 완료 |
+| 반영 승인·거절(Notion 본문, `반영일` 기록) | 완료 |
+| QA 준비(`QA_PREPARE`): 체크리스트 생성, 디자인 검수, 1차 자동화 검수(코드 읽기) | 완료 |
+| 1차·2차 체크리스트, 디자인 검수, 셀·항목 편집, 종료 API | 완료 |
+| 자동 실행(Playwright)·증적·리뷰 수집·페르소나 | 없앰(D13) |
 
 ## 로컬 실행
 

@@ -24,6 +24,7 @@ import java.util.Set;
 import java.util.stream.IntStream;
 
 import static gravit.qa.job.repository.sql.JobQueueSql.CLAIM_NEXT;
+import static gravit.qa.job.repository.sql.JobQueueSql.EXISTS_ACTIVE_JOB;
 import static gravit.qa.job.repository.sql.JobQueueSql.FAIL_RUNNING_STEPS;
 import static gravit.qa.job.repository.sql.JobQueueSql.FINISH_STEP;
 import static gravit.qa.job.repository.sql.JobQueueSql.HEARTBEAT;
@@ -37,7 +38,7 @@ import static gravit.qa.job.repository.sql.JobQueueSql.REQUEST_CANCEL;
 import static gravit.qa.job.repository.sql.JobQueueSql.RESET_STEPS;
 import static gravit.qa.job.repository.sql.JobQueueSql.SELECT_CANCEL_REQUESTED;
 import static gravit.qa.job.repository.sql.JobQueueSql.SELECT_JOB;
-import static gravit.qa.job.repository.sql.JobQueueSql.SELECT_LATEST_JOB_ID;
+import static gravit.qa.job.repository.sql.JobQueueSql.SELECT_LATEST_JOB;
 import static gravit.qa.job.repository.sql.JobQueueSql.SELECT_SPRINT_IDS_WITH_ACTIVE_JOB;
 import static gravit.qa.job.repository.sql.JobQueueSql.SELECT_STEPS;
 import static gravit.qa.job.repository.sql.JobQueueSql.START_STEP;
@@ -276,15 +277,15 @@ public class JobQueueRepositoryImpl implements JobQueueRepository {
     }
 
     @Override
-    public Optional<Long> findLatestJobId(
-            long sprintId,
-            JobType type
-    ) {
-        MapSqlParameterSource params = new MapSqlParameterSource()
-                .addValue("sprintId", sprintId)
-                .addValue("type", type.name());
+    public Optional<JobDto> findLatestJob(long sprintId) {
+        MapSqlParameterSource params = new MapSqlParameterSource("sprintId", sprintId);
+        return jdbcTemplate.query(SELECT_LATEST_JOB, params, JOB_ROW_MAPPER).stream().findFirst();
+    }
 
-        return Optional.ofNullable(jdbcTemplate.queryForObject(SELECT_LATEST_JOB_ID, params, Long.class));
+    @Override
+    public boolean existsActiveJob(long sprintId) {
+        MapSqlParameterSource params = new MapSqlParameterSource("sprintId", sprintId);
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject(EXISTS_ACTIVE_JOB, params, Boolean.class));
     }
 
     @Override

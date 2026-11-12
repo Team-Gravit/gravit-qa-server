@@ -18,11 +18,11 @@ public record CheckCellHistoryResponse(
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED)
         CellSource source,
 
-        @Schema(description = "변경자 adminId. 자동 판정이면 null")
-        Long changedBy,
+        @Schema(description = "1차 판정 사유 또는 판정 초기화 사유")
+        String reason,
 
-        @Schema(description = "자동 판정한 실행 ID")
-        Long autoRunId,
+        @Schema(description = "변경한 관리자 ID. 1차 판정이면 null")
+        Long changedBy,
 
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED)
         OffsetDateTime changedAt
@@ -33,8 +33,8 @@ public record CheckCellHistoryResponse(
                 history.getFromState(),
                 history.getToState(),
                 history.getSource(),
+                history.getReason(),
                 history.getChangedBy(),
-                history.getAutoRunId(),
                 KstTimes.toOffset(history.getChangedAt())
         );
     }

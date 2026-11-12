@@ -6,10 +6,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import java.util.List;
 
 public record ChecklistResponse(
-        @Schema(
-                description = "스프린트 ID",
-                requiredMode = Schema.RequiredMode.REQUIRED
-        )
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED)
         long sprintId,
 
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED)

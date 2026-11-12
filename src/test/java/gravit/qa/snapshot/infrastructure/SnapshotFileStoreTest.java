@@ -49,16 +49,16 @@ class SnapshotFileStoreTest {
         void 같은_이름으로_다시_저장하면_덮어쓰고_임시_파일을_남기지_않는다() throws Exception {
             // given
             SnapshotFileStore store = new SnapshotFileStore(new StorageProps(root.toString()));
-            store.save(12L, 3L, SnapshotSource.FIGMA_FRAME, "4-2.png", new byte[]{1, 2, 3});
+            store.save(12L, 3L, SnapshotSource.FIGMA_NODES, "ACC-01.json", new byte[]{1, 2, 3});
 
             // when
-            StoredSnapshotDto stored = store.save(12L, 3L, SnapshotSource.FIGMA_FRAME, "4-2.png", new byte[]{9});
+            StoredSnapshotDto stored = store.save(12L, 3L, SnapshotSource.FIGMA_NODES, "ACC-01.json", new byte[]{9});
 
             // then
-            Path directory = root.resolve("snapshots/12/3/FIGMA_FRAME");
+            Path directory = root.resolve("snapshots/12/3/FIGMA_NODES");
             assertThat(Files.readAllBytes(root.resolve(stored.storagePath()))).containsExactly(9);
             try (var files = Files.list(directory)) {
-                assertThat(files.map(path -> path.getFileName().toString())).containsExactly("4-2.png");
+                assertThat(files.map(path -> path.getFileName().toString())).containsExactly("ACC-01.json");
             }
         }
     }

@@ -10,10 +10,7 @@ public record ChecklistItemDraftDto(
         String expected,
         List<Part> parts,
         Classification classification,
-        ClassificationCriteriaDto criteria,
-        boolean automationGap,
-        String testRef,
-        String personaKey
+        List<String> specRowIds
 ) {
 
     public static ChecklistItemDraftDto of(
@@ -21,11 +18,8 @@ public record ChecklistItemDraftDto(
             String expected,
             List<Part> parts,
             Classification classification,
-            ClassificationCriteriaDto criteria,
-            boolean automationGap,
-            String testRef,
-            String personaKey
+            List<String> specRowIds
     ) {
-        return new ChecklistItemDraftDto(title, expected, parts, classification, criteria, automationGap, testRef, personaKey);
+        return new ChecklistItemDraftDto(title, expected, List.copyOf(parts), classification, List.copyOf(specRowIds));
     }
 }

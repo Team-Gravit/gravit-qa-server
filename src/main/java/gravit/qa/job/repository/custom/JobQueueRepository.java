@@ -94,10 +94,9 @@ public interface JobQueueRepository {
             LocalDateTime now
     );
 
-    Optional<Long> findLatestJobId(
-            long sprintId,
-            JobType type
-    );
+    Optional<JobDto> findLatestJob(long sprintId);
+
+    boolean existsActiveJob(long sprintId);
 
     Set<Long> findSprintIdsWithActiveJob(
             Collection<Long> sprintIds,

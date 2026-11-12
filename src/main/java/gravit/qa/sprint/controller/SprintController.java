@@ -1,11 +1,11 @@
 package gravit.qa.sprint.controller;
 
-import gravit.qa.job.dto.response.JobResponse;
 import gravit.qa.security.principal.LoginAdmin;
 import gravit.qa.sprint.controller.docs.SprintControllerDocs;
-import gravit.qa.sprint.domain.SprintStatus;
+import gravit.qa.sprint.dto.request.SetupJobStartRequest;
 import gravit.qa.sprint.dto.request.SprintCloseRequest;
 import gravit.qa.sprint.dto.request.SprintCreateRequest;
+import gravit.qa.sprint.dto.response.SetupJobStartResponse;
 import gravit.qa.sprint.dto.response.SprintResponse;
 import gravit.qa.sprint.dto.response.SprintSummaryResponse;
 import gravit.qa.sprint.facade.SetupFacade;
@@ -19,7 +19,6 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -37,8 +36,8 @@ public class SprintController implements SprintControllerDocs {
     private final SetupFacade setupFacade;
 
     @GetMapping
-    public ResponseEntity<List<SprintSummaryResponse>> listSprints(@RequestParam(name = "status", required = false) SprintStatus status) {
-        return ResponseEntity.status(OK).body(sprintFacade.listSprints(status));
+    public ResponseEntity<List<SprintSummaryResponse>> listSprints() {
+        return ResponseEntity.status(OK).body(sprintFacade.listSprints());
     }
 
     @PostMapping
@@ -63,7 +62,10 @@ public class SprintController implements SprintControllerDocs {
     }
 
     @PostMapping("/{sprintId}/setup-jobs")
-    public ResponseEntity<JobResponse> startSetupJob(@PathVariable("sprintId") long sprintId) {
-        return ResponseEntity.status(ACCEPTED).body(setupFacade.startSetup(sprintId));
+    public ResponseEntity<SetupJobStartResponse> startSetupJob(
+            @PathVariable("sprintId") long sprintId,
+            @Valid @RequestBody SetupJobStartRequest request
+    ) {
+        return ResponseEntity.status(ACCEPTED).body(setupFacade.startSetup(sprintId, request.version()));
     }
 }

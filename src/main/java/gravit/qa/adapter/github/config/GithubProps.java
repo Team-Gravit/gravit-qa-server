@@ -19,12 +19,15 @@ public record GithubProps(
         @NotBlank
         String owner,
 
+        @NotBlank @DefaultValue("qa-baseline")
+        String qaBranch,
+
         @NotNull @DefaultValue("10s")
         Duration timeout
 ) {
 
     @Override
     public String toString() {
-        return "GithubProps[baseUrl=" + baseUrl + ", owner=" + owner + ", timeout=" + timeout + "]";
+        return "GithubProps[baseUrl=" + baseUrl + ", owner=" + owner + ", qaBranch=" + qaBranch + ", timeout=" + timeout + "]";
     }
 }

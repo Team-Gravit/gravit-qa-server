@@ -1,6 +1,8 @@
 package gravit.qa.feature.domain;
 
-import gravit.qa.sprint.dto.internal.WarningDto;
+import gravit.qa.feature.dto.internal.SpecHistoryRowDto;
+import gravit.qa.feature.dto.internal.SpecRowDto;
+import gravit.qa.feature.dto.internal.SprintFeatureSpecDto;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
@@ -34,34 +36,62 @@ public class SprintFeature {
     @Column(name = "figma_node_ids", nullable = false)
     private List<String> figmaNodeIds;
 
+    @Column(name = "changed", nullable = false)
+    private boolean changed;
+
+    @Column(name = "spec_markdown", nullable = false)
+    private String specMarkdown;
+
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "warnings", nullable = false)
-    private List<WarningDto> warnings;
+    @Column(name = "spec_rows", nullable = false)
+    private List<SpecRowDto> specRows;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "history_rows", nullable = false)
+    private List<SpecHistoryRowDto> historyRows;
 
     @Builder(access = AccessLevel.PRIVATE)
     private SprintFeature(
             Long sprintId,
             Long featureId,
             List<String> figmaNodeIds,
-            List<WarningDto> warnings
+            boolean changed,
+            String specMarkdown,
+            List<SpecRowDto> specRows,
+            List<SpecHistoryRowDto> historyRows
     ) {
         this.sprintId = sprintId;
         this.featureId = featureId;
         this.figmaNodeIds = figmaNodeIds;
-        this.warnings = warnings;
+        this.changed = changed;
+        this.specMarkdown = specMarkdown;
+        this.specRows = specRows;
+        this.historyRows = historyRows;
     }
 
     public static SprintFeature create(
             long sprintId,
-            long featureId,
-            List<String> figmaNodeIds,
-            List<WarningDto> warnings
+            SprintFeatureSpecDto spec
     ) {
         return SprintFeature.builder()
                 .sprintId(sprintId)
-                .featureId(featureId)
-                .figmaNodeIds(List.copyOf(figmaNodeIds))
-                .warnings(List.copyOf(warnings))
+                .featureId(spec.featureId())
+                .figmaNodeIds(List.of())
+                .changed(spec.changed())
+                .specMarkdown(spec.specMarkdown())
+                .specRows(List.copyOf(spec.specRows()))
+                .historyRows(List.copyOf(spec.historyRows()))
                 .build();
+    }
+
+    public void updateSpec(SprintFeatureSpecDto spec) {
+        this.changed = spec.changed();
+        this.specMarkdown = spec.specMarkdown();
+        this.specRows = List.copyOf(spec.specRows());
+        this.historyRows = List.copyOf(spec.historyRows());
+    }
+
+    public void updateFigmaNodeIds(List<String> figmaNodeIds) {
+        this.figmaNodeIds = List.copyOf(figmaNodeIds);
     }
 }

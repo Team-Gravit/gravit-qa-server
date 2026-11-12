@@ -10,9 +10,11 @@ import gravit.qa.adapter.notion.dto.internal.NotionBlockDto;
 import gravit.qa.adapter.notion.dto.internal.NotionPageBodyDto;
 import gravit.qa.adapter.notion.dto.internal.NotionSpecDto;
 import gravit.qa.adapter.notion.dto.internal.NotionSprintDto;
+import gravit.qa.adapter.notion.dto.internal.NotionWriteScopeDto;
 import gravit.qa.adapter.notion.support.NotionBlockRenderer;
 import gravit.qa.adapter.notion.support.NotionIds;
 import gravit.qa.adapter.notion.support.NotionPropertyReader;
+import gravit.qa.adapter.notion.support.NotionRichTexts;
 import gravit.qa.adapter.notion.support.NotionWriteGuard;
 import gravit.qa.adapter.support.ExternalCallExecutor;
 import gravit.qa.adapter.support.ExternalResponses;
@@ -26,11 +28,11 @@ import org.springframework.web.client.RestClient;
 import java.net.URI;
 import java.time.Clock;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 
 import static gravit.qa.adapter.domain.ExternalApi.NOTION;
-import static gravit.qa.adapter.notion.support.NotionWriteGuard.BASELINE_PROPERTY;
 
 @Component
 public class NotionClient {
@@ -46,6 +48,7 @@ public class NotionClient {
 
     private static final String VERSION_HEADER = "Notion-Version";
     private static final String PAGE_PATH = "/v1/pages/";
+    private static final String BLOCK_PATH = "/v1/blocks/";
     private static final String BLOCK_CHILDREN_PATH = "/v1/blocks/%s/children";
     private static final String DATABASE_QUERY_PATH = "/v1/databases/%s/query";
     private static final String PROPERTY_ITEM_PATH = "/v1/pages/%s/properties/%s";
@@ -55,7 +58,7 @@ public class NotionClient {
     private static final Set<String> UNEXPANDED_BLOCK_TYPES = Set.of("child_page", "child_database");
     private static final int PAGE_SIZE = 100;
     private static final int MAX_BLOCK_DEPTH = 8;
-    private static final int MAX_RICH_TEXT_LENGTH = 2000;
+    private static final String TABLE_ROW = "table_row";
 
     private final RestClient restClient;
 
@@ -135,22 +138,88 @@ public class NotionClient {
         );
     }
 
-    public void updateSprintBaseline(
-            String sprintPageIdOrUrl,
-            String baseline
+    public void updateBlockText(
+            String blockId,
+            String blockType,
+            String text,
+            NotionWriteScopeDto scope
     ) {
-        NotionSprintDto sprint = getSprint(sprintPageIdOrUrl);
-
         ObjectNode body = objectMapper.createObjectNode();
-        ArrayNode richText = body.putObject("properties").putObject(BASELINE_PROPERTY).putArray("rich_text");
-        String text = baseline == null ? "" : baseline;
-        for (int start = 0; start < text.length(); start += MAX_RICH_TEXT_LENGTH) {
-            richText.addObject()
-                    .put("type", "text")
-                    .putObject("text").put("content", text.substring(start, Math.min(text.length(), start + MAX_RICH_TEXT_LENGTH)));
+        body.putObject(blockType).set("rich_text", NotionRichTexts.of(text));
+
+        request(HttpMethod.PATCH, BLOCK_PATH + NotionIds.normalize(blockId), null, body, scope);
+    }
+
+    public void updateTableRow(
+            String rowId,
+            Collection<String> cells,
+            NotionWriteScopeDto scope
+    ) {
+        ObjectNode body = objectMapper.createObjectNode();
+        ArrayNode cellArray = body.putObject(TABLE_ROW).putArray("cells");
+        cells.forEach(cell -> cellArray.add(NotionRichTexts.of(cell)));
+
+        request(HttpMethod.PATCH, BLOCK_PATH + NotionIds.normalize(rowId), null, body, scope);
+    }
+
+    public String appendTextBlock(
+            String parentId,
+            String afterBlockId,
+            String blockType,
+            String text,
+            NotionWriteScopeDto scope
+    ) {
+        ObjectNode child = objectMapper.createObjectNode().put("type", blockType);
+        child.putObject(blockType).set("rich_text", NotionRichTexts.of(text));
+
+        return append(parentId, afterBlockId, child, scope);
+    }
+
+    public String appendTableRow(
+            String tableId,
+            String afterRowId,
+            Collection<String> cells,
+            NotionWriteScopeDto scope
+    ) {
+        ObjectNode child = objectMapper.createObjectNode().put("type", TABLE_ROW);
+        ArrayNode cellArray = child.putObject(TABLE_ROW).putArray("cells");
+        cells.forEach(cell -> cellArray.add(NotionRichTexts.of(cell)));
+
+        return append(tableId, afterRowId, child, scope);
+    }
+
+    public void deleteBlock(
+            String blockId,
+            NotionWriteScopeDto scope
+    ) {
+        request(HttpMethod.DELETE, BLOCK_PATH + NotionIds.normalize(blockId), null, null, scope);
+    }
+
+    private String append(
+            String parentId,
+            String afterBlockId,
+            ObjectNode child,
+            NotionWriteScopeDto scope
+    ) {
+        ObjectNode body = objectMapper.createObjectNode();
+        body.putArray("children").add(child);
+        if (afterBlockId != null) {
+            body.put("after", NotionIds.normalize(afterBlockId));
         }
 
-        request(HttpMethod.PATCH, PAGE_PATH + sprint.pageId(), null, body);
+        String path = BLOCK_CHILDREN_PATH.formatted(NotionIds.normalize(parentId));
+        JsonNode response = request(HttpMethod.PATCH, path, null, body, scope);
+        JsonNode results = response.path("results");
+        if (afterBlockId == null) {
+            return NotionIds.normalize(results.get(results.size() - 1).path("id").asText());
+        }
+        String after = NotionIds.normalize(afterBlockId);
+        for (int index = 0; index < results.size() - 1; index++) {
+            if (NotionIds.isSame(results.get(index).path("id").asText(), after)) {
+                return NotionIds.normalize(results.get(index + 1).path("id").asText());
+            }
+        }
+        return NotionIds.normalize(results.get(results.size() - 1).path("id").asText());
     }
 
     private NotionSprintDto toSprint(JsonNode page) {
@@ -170,7 +239,6 @@ public class NotionClient {
                 relationIds(pageId, properties.path(SPRINT_TARGET_FEATURES)),
                 NotionPropertyReader.text(properties.path(SPRINT_CHANGE_SUMMARY)),
                 NotionPropertyReader.url(properties.path(SPRINT_FIGMA_QA_PAGE)),
-                NotionPropertyReader.text(properties.path(BASELINE_PROPERTY)),
                 page.toString()
         );
     }
@@ -272,7 +340,17 @@ public class NotionClient {
             String query,
             JsonNode body
     ) {
-        NotionWriteGuard.check(method, path, body);
+        return request(method, path, query, body, null);
+    }
+
+    private JsonNode request(
+            HttpMethod method,
+            String path,
+            String query,
+            JsonNode body,
+            NotionWriteScopeDto scope
+    ) {
+        NotionWriteGuard.check(method, path, body, scope);
 
         String operation = method.name() + " " + path;
         URI uri = URI.create(notionProps.baseUrl() + path + (query == null ? "" : "?" + query));

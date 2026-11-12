@@ -45,11 +45,11 @@ public class CheckCellHistory {
     @Column(name = "source", nullable = false)
     private CellSource source;
 
+    @Column(name = "reason")
+    private String reason;
+
     @Column(name = "changed_by")
     private Long changedBy;
-
-    @Column(name = "auto_run_id")
-    private Long autoRunId;
 
     @Column(name = "changed_at", nullable = false)
     private LocalDateTime changedAt;
@@ -61,8 +61,8 @@ public class CheckCellHistory {
             CellState fromState,
             CellState toState,
             CellSource source,
+            String reason,
             Long changedBy,
-            Long autoRunId,
             LocalDateTime changedAt
     ) {
         this.itemId = itemId;
@@ -70,8 +70,8 @@ public class CheckCellHistory {
         this.fromState = fromState;
         this.toState = toState;
         this.source = source;
+        this.reason = reason;
         this.changedBy = changedBy;
-        this.autoRunId = autoRunId;
         this.changedAt = changedAt;
     }
 
@@ -81,8 +81,8 @@ public class CheckCellHistory {
             CellState fromState,
             CellState toState,
             CellSource source,
+            String reason,
             Long changedBy,
-            Long autoRunId,
             LocalDateTime changedAt
     ) {
         return CheckCellHistory.builder()
@@ -91,8 +91,8 @@ public class CheckCellHistory {
                 .fromState(fromState)
                 .toState(toState)
                 .source(source)
+                .reason(reason)
                 .changedBy(changedBy)
-                .autoRunId(autoRunId)
                 .changedAt(changedAt)
                 .build();
     }

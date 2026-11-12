@@ -1,37 +1,41 @@
 package gravit.qa.checklist.support;
 
-import gravit.qa.checklist.domain.Classification;
 import gravit.qa.checklist.dto.internal.ChecklistDraftItemOutputDto;
 import gravit.qa.checklist.dto.internal.ChecklistDraftOutputDto;
-import gravit.qa.checklist.dto.internal.ChecklistItemDraftDto;
-import gravit.qa.checklist.service.port.TestCatalog;
 import gravit.qa.feature.domain.Part;
-import gravit.qa.persona.domain.PersonaKey;
-import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Component;
+import gravit.qa.feature.dto.internal.SpecRowDto;
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
 
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
-@Component
-@RequiredArgsConstructor
-public class ChecklistDraftValidator {
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
+public final class ChecklistDraftValidator {
 
-    private static final String ITEMS_FIELD = "items";
     private static final String ITEM_PATH = "items[%d]";
+    private static final String DELIMITER = ", ";
 
-    private final TestCatalog testCatalog;
-
-    public List<String> validate(
+    public static List<String> validate(
             ChecklistDraftOutputDto output,
-            List<Part> featureParts
+            List<Part> featureParts,
+            List<SpecRowDto> specRows
     ) {
         List<String> errors = new ArrayList<>();
         if (output.items() == null || output.items().isEmpty()) {
-            errors.add(ITEMS_FIELD + "에 체크 항목이 1개 이상 있어야 합니다.");
+            errors.add("items에 체크 항목이 1개 이상 있어야 합니다.");
             return errors;
         }
+
+        Map<String, SpecRowDto> rowIdToRow = new LinkedHashMap<>();
+        specRows.forEach(row -> rowIdToRow.put(row.rowId(), row));
+        Set<String> coveredRowIds = new HashSet<>();
+        Set<String> titles = new HashSet<>();
 
         for (int index = 0; index < output.items().size(); index++) {
             ChecklistDraftItemOutputDto item = output.items().get(index);
@@ -39,39 +43,25 @@ public class ChecklistDraftValidator {
             requireText(item.evidence(), path + ".evidence", errors);
             requireText(item.title(), path + ".title", errors);
             requireText(item.expected(), path + ".expected", errors);
-            validateParts(item.parts(), featureParts, path, errors);
-            validatePersonaKey(item.personaKey(), path, errors);
-            validateTestRef(item.testRef(), path, errors);
-        }
-        return errors;
-    }
-
-    public List<String> validateDrafts(
-            List<ChecklistItemDraftDto> drafts,
-            List<Part> featureParts
-    ) {
-        List<String> errors = new ArrayList<>();
-        if (drafts.isEmpty()) {
-            errors.add(ITEMS_FIELD + "에 체크 항목이 1개 이상 있어야 합니다.");
-            return errors;
-        }
-
-        for (int index = 0; index < drafts.size(); index++) {
-            ChecklistItemDraftDto draft = drafts.get(index);
-            String path = ITEM_PATH.formatted(index);
-            requireText(draft.title(), path + ".title", errors);
-            requireText(draft.expected(), path + ".expected", errors);
-            validateParts(draft.parts(), featureParts, path, errors);
-            validatePersonaKey(draft.personaKey(), path, errors);
-            validateTestRef(draft.testRef(), path, errors);
-            if (draft.classification() == Classification.AUTO && !testCatalog.contains(draft.testRef())) {
-                errors.add(path + ": AUTO 항목의 testRef가 테스트 카탈로그에 없습니다.");
+            requireText(item.classificationReason(), path + ".classificationReason", errors);
+            if (item.title() != null && !item.title().isBlank() && !titles.add(item.title().trim())) {
+                errors.add(path + ".title '" + item.title().trim() + "'과 행위가 같은 항목이 이미 있습니다. 하나로 묶으세요.");
             }
+            validateParts(item.parts(), featureParts, path, errors);
+            List<SpecRowDto> rows = validateRowIds(item.specRowIds(), rowIdToRow, path, errors);
+            coveredRowIds.addAll(rows.stream().map(SpecRowDto::rowId).toList());
+            validatePlatformTags(item.parts(), rows, path, errors);
+        }
+
+        Set<String> missing = new LinkedHashSet<>(rowIdToRow.keySet());
+        missing.removeAll(coveredRowIds);
+        if (!missing.isEmpty()) {
+            errors.add("어느 항목도 다루지 않은 명세 행이 있습니다: " + String.join(DELIMITER, missing));
         }
         return errors;
     }
 
-    private void requireText(
+    private static void requireText(
             String value,
             String field,
             List<String> errors
@@ -81,7 +71,7 @@ public class ChecklistDraftValidator {
         }
     }
 
-    private void validateParts(
+    private static void validateParts(
             List<Part> parts,
             List<Part> featureParts,
             String path,
@@ -100,23 +90,47 @@ public class ChecklistDraftValidator {
                 .forEach(part -> errors.add(path + ".parts의 " + part + "는 기능 파트 " + featureParts + "에 없습니다."));
     }
 
-    private void validatePersonaKey(
-            String personaKey,
+    private static List<SpecRowDto> validateRowIds(
+            List<String> rowIds,
+            Map<String, SpecRowDto> rowIdToRow,
             String path,
             List<String> errors
     ) {
-        if (personaKey != null && !PersonaKey.isKnown(personaKey)) {
-            errors.add(path + ".personaKey '" + personaKey + "'는 페르소나 목록에 없습니다.");
+        if (rowIdToRow.isEmpty()) {
+            return List.of();
         }
+        if (rowIds == null || rowIds.isEmpty()) {
+            errors.add(path + ".specRowIds에 다루는 명세 행 번호가 1개 이상 있어야 합니다.");
+            return List.of();
+        }
+        List<SpecRowDto> rows = new ArrayList<>();
+        for (String rowId : rowIds) {
+            SpecRowDto row = rowIdToRow.get(rowId == null ? null : rowId.trim());
+            if (row == null) {
+                errors.add(path + ".specRowIds의 '" + rowId + "'는 명세에 없는 행 번호입니다.");
+            } else {
+                rows.add(row);
+            }
+        }
+        return rows;
     }
 
-    private void validateTestRef(
-            String testRef,
+    private static void validatePlatformTags(
+            List<Part> parts,
+            List<SpecRowDto> rows,
             String path,
             List<String> errors
     ) {
-        if (testRef != null && !testCatalog.contains(testRef)) {
-            errors.add(path + ".testRef '" + testRef + "'는 테스트 카탈로그에 없습니다.");
+        if (parts == null || rows.isEmpty()) {
+            return;
+        }
+        boolean anyWeb = rows.stream().anyMatch(SpecRowDto::appliesToWeb);
+        boolean anyApp = rows.stream().anyMatch(SpecRowDto::appliesToApp);
+        if (parts.contains(Part.APP) && !anyApp) {
+            errors.add(path + ": 다루는 명세 행이 모두 [웹] 행인데 parts에 APP이 있습니다.");
+        }
+        if (parts.contains(Part.WEB) && !anyWeb) {
+            errors.add(path + ": 다루는 명세 행이 모두 [앱] 행인데 parts에 WEB이 있습니다.");
         }
     }
 }

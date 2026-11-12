@@ -1,6 +1,6 @@
 # gravit-qa 배포 runbook
 
-> 대상: dev 환경 qa-api 첫 배포와 이후 운영. qa-e2e는 C7에서 다룬다.
+> 대상: dev 환경 qa-api 첫 배포와 이후 운영. 자동 실행 워커(qa-e2e)는 QA 흐름 재설계(D13)로 없앴다.
 > 비밀값(DB 비밀번호, 토큰, 시크릿)은 숨김 입력(`read -rs`, psql `\password`, `gh secret set` 프롬프트)으로만 넣는다. 채팅, 커밋, 이슈, 로그에 남기지 않는다.
 > `[확인 필요]`는 서버에서 확인한 뒤 이 문서를 고친다. 명령은 bash와 zsh(서버 로그인 셸)에서 같게 동작하도록 쓴다. zsh에서 뜻이 다른 `read -p`와, 설정(`interactivecomments`)에 따라 명령의 인자가 되는 코드 블록 안 `#` 주석은 쓰지 않는다.
 
@@ -29,7 +29,6 @@
 | QA DB 비밀번호 | `.env` `QA_DB_PASSWORD` | 새로 정함 | **비밀**. 영숫자만 쓴다(`.env`에서 `$`, `#`, 따옴표, 공백은 다르게 해석된다) |
 | `QA_API_PORT` | `.env` | 미정 (#12) | 서버의 빈 포트 |
 | `QA_API_CPUS`, `QA_API_MEMORY` | `.env` | 미정 (#12) | 예: `1.0`, `1g` |
-| `QA_E2E_CPUS`, `QA_E2E_MEMORY` | `.env` | 미정 (#12) | qa-e2e를 띄우지 않아도 비면 compose가 해석에 실패한다. C7 전에는 임시값 가능 |
 | `QA_AUTH_HOST` | `.env` | `https://grav-it-dev.inuappcenter.kr` | admin-web이 바라보는 gravit-server |
 | `DOCKER_HUB_USERNAME` | `.env`, GitHub Secret | gravit-server와 같은 계정 | 이미지 `{값}/gravit-qa-server` |
 | `DOCKER_HUB_PASSWORD` | GitHub Secret | gravit-server와 같은 값 | **비밀** |
@@ -178,8 +177,6 @@
     'QA_API_PORT=<포트>' \
     'QA_API_CPUS=<값>' \
     'QA_API_MEMORY=<값>' \
-    'QA_E2E_CPUS=<값>' \
-    'QA_E2E_MEMORY=<값>' \
     'QA_DB_URL=jdbc:postgresql://<호스트>:<포트>/gravit_qa' \
     'QA_DB_USERNAME=gravit_qa' \
     'QA_AUTH_HOST=https://grav-it-dev.inuappcenter.kr'; do
@@ -201,7 +198,7 @@
 - [ ] 확인: 값은 출력하지 않고 키만 검사한다
 
   ```bash
-  for k in DOCKER_HUB_USERNAME QA_API_PORT QA_API_CPUS QA_API_MEMORY QA_E2E_CPUS QA_E2E_MEMORY \
+  for k in DOCKER_HUB_USERNAME QA_API_PORT QA_API_CPUS QA_API_MEMORY \
            QA_DB_URL QA_DB_USERNAME QA_DB_PASSWORD QA_AUTH_HOST \
            FIGMA_TOKEN NOTION_TOKEN GITHUB_TOKEN LITELLM_API_KEY; do
     grep -q "^$k=." .env && echo "ok      $k" || echo "MISSING $k"
