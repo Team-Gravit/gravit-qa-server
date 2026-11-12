@@ -11,10 +11,13 @@ import java.time.Duration;
 @Validated
 @ConfigurationProperties("qa.job")
 public record JobProps(
-        @Min(1) @DefaultValue("4") int maxAttempts,
+        @Min(1) @DefaultValue("4")
+        int maxAttempts,
 
-        @NotNull @DefaultValue("2m") Duration backoffBase,
+        @NotNull @DefaultValue("2m")
+        Duration backoffBase,
 
-        @NotNull @DefaultValue("2m") Duration heartbeatTimeout
+        @NotNull @DefaultValue("2m")
+        Duration heartbeatTimeout
 ) {
 }

@@ -11,10 +11,13 @@ import java.time.Duration;
 @Validated
 @ConfigurationProperties("qa.auth")
 public record AuthProps(
-        @NotBlank String host,
+        @NotBlank
+        String host,
 
-        @NotNull @DefaultValue("5s") Duration timeout,
+        @NotNull @DefaultValue("5s")
+        Duration timeout,
 
-        @NotNull @DefaultValue("300s") Duration cacheTtl
+        @NotNull @DefaultValue("300s")
+        Duration cacheTtl
 ) {
 }

@@ -11,3 +11,6 @@ out/
 .env
 *.log
 evidence/
+
+/docs/*
+!/docs/deploy-runbook.md

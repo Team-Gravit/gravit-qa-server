@@ -4,9 +4,7 @@ import gravit.qa.security.dto.internal.AdminMeDto;
 
 public record LoginAdmin(
         long adminId,
-
         String nickname,
-
         String email
 ) {
 

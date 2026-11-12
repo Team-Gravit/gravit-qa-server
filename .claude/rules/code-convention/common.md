@@ -46,6 +46,27 @@ public ReturnType methodName(
 }
 ```
 
+- record 컴포넌트도 한 줄에 하나씩 쓴다. 어노테이션이 없으면 컴포넌트 사이에 빈 줄을 넣지 않는다
+- 어노테이션이 붙은 컴포넌트(`*Props`의 validation·`@DefaultValue`, Response의 `@Schema`)는 어노테이션을 컴포넌트 위 자기 줄에 두고, 컴포넌트 사이를 빈 줄로 구분한다
+
+```java
+public record OpenApiDocumentDto(
+        String url,
+        JsonNode document,
+        String rawJson
+) {
+}
+
+public record OpenApiProps(
+        @NotBlank
+        String url,
+
+        @NotNull @DefaultValue("30s")
+        Duration timeout
+) {
+}
+```
+
 - 주입 필드는 종류별로 묶는다. 종류가 바뀌는 곳에만 빈 줄을 넣고, 같은 종류 안에서는 빈 줄을 넣지 않는다
 - 종류와 순서
   1. Facade

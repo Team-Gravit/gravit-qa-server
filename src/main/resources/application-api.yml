@@ -1,6 +1,5 @@
 qa:
   worker:
     job-types:
-      - SETUP
-      - REVIEW_COLLECT
-      - EVIDENCE_CLEANUP
+      - SPEC_LOAD
+      - QA_PREPARE

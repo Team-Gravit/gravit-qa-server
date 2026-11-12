@@ -8,42 +8,31 @@ services:
       - TZ=Asia/Seoul
       - SPRING_PROFILES_ACTIVE=api
       - QA_WORKER_ID=qa-api
+      - JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=75.0
       - QA_DB_URL
       - QA_DB_USERNAME
       - QA_DB_PASSWORD
       - QA_AUTH_HOST
+      - FIGMA_TOKEN
+      - NOTION_TOKEN
+      - GITHUB_TOKEN
+      - LITELLM_API_KEY
     volumes:
       - qa_evidence:/data/evidence
     networks:
       - gravit-qa
       - llm-net
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 90s
     deploy:
       resources:
         limits:
           cpus: "${QA_API_CPUS}"
           memory: "${QA_API_MEMORY}"
-    restart: unless-stopped
-
-  qa-e2e:
-    container_name: gravit-qa-e2e
-    image: ${DOCKER_HUB_USERNAME}/gravit-qa-server:latest
-    environment:
-      - TZ=Asia/Seoul
-      - SPRING_PROFILES_ACTIVE=e2e
-      - QA_WORKER_ID=qa-e2e
-      - QA_DB_URL
-      - QA_DB_USERNAME
-      - QA_DB_PASSWORD
-      - QA_AUTH_HOST
-    volumes:
-      - qa_evidence:/data/evidence
-    networks:
-      - gravit-qa
-    deploy:
-      resources:
-        limits:
-          cpus: "${QA_E2E_CPUS}"
-          memory: "${QA_E2E_MEMORY}"
     restart: unless-stopped
 
 volumes:

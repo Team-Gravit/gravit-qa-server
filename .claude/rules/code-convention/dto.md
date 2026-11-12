@@ -8,7 +8,7 @@ paths:
 
 - DTO는 `record` 타입으로 선언하라
 - 패키지는 용도에 따라 `{domain}/dto/request/`, `{domain}/dto/response/`, `{domain}/dto/internal/`, `{domain}/dto/event/`로 나눠라
-- record 컴포넌트(필드) 사이는 빈 줄로 구분하라
+- record 컴포넌트 줄바꿈과 빈 줄은 `common.md`의 포맷팅을 따른다 (어노테이션이 없으면 빈 줄 없이, 있으면 빈 줄로 구분)
 - record 안에 record를 중첩 선언하지 마라. 파일 하나에 record 하나를 두고, 목록 요소나 하위 구조는 별도 파일로 분리하라 (예: `InterviewGradingJudgmentDto` 안의 `ConceptJudgment` → `InterviewConceptJudgmentDto`)
 - 값을 담아 레이어 사이를 오가는 객체는 이름이 값 객체처럼 보여도 DTO다. `domain/`이 아니라 `dto/internal/`에 `Dto` 접미사로 둬라 (예: `InterviewScoreDto`)
 

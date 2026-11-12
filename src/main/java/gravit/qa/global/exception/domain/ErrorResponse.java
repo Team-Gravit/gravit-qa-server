@@ -2,7 +2,6 @@ package gravit.qa.global.exception.domain;
 
 public record ErrorResponse<T>(
         String error,
-
         T message
 ) {
 

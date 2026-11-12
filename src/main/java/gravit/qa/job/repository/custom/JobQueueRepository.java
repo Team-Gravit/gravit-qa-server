@@ -6,11 +6,13 @@ import gravit.qa.job.domain.JobType;
 import gravit.qa.job.dto.internal.ClaimedJobDto;
 import gravit.qa.job.dto.internal.JobDto;
 import gravit.qa.job.dto.internal.JobStepDto;
+import gravit.qa.job.dto.internal.ReapedJobDto;
 
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 public interface JobQueueRepository {
 
@@ -86,9 +88,18 @@ public interface JobQueueRepository {
             LocalDateTime now
     );
 
-    List<Long> reapStale(
+    List<ReapedJobDto> reapStale(
             LocalDateTime staleBefore,
             String error,
             LocalDateTime now
+    );
+
+    Optional<JobDto> findLatestJob(long sprintId);
+
+    boolean existsActiveJob(long sprintId);
+
+    Set<Long> findSprintIdsWithActiveJob(
+            Collection<Long> sprintIds,
+            JobType type
     );
 }

@@ -14,7 +14,7 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 @SpringBootTest
 @ActiveProfiles("test")
-@Import({PostgresTestConfig.class, TestClockConfig.class, AdminMeStubConfig.class})
+@Import({PostgresTestConfig.class, TestClockConfig.class, AdminMeStubConfig.class, ExternalApiStubConfig.class})
 @ExtendWith(DatabaseClearExtension.class)
 public @interface QaSpringBootTest {
 }

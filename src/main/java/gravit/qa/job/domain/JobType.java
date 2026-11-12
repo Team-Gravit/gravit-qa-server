@@ -7,10 +7,8 @@ import java.util.List;
 @Getter
 public enum JobType {
 
-    SETUP(List.of("BASELINE", "NOTION", "FIGMA", "DIFF", "OPENAPI", "INTERPRET", "VALIDATE", "APPLY")),
-    AUTO_RUN(List.of("FIXTURE", "TOKEN", "EXECUTE", "JUDGE")),
-    REVIEW_COLLECT(List.of("COLLECT")),
-    EVIDENCE_CLEANUP(List.of("CLEANUP"));
+    SPEC_LOAD(List.of("CONNECT", "SPEC_COLLECT")),
+    QA_PREPARE(List.of("CHECKLIST_GENERATE", "DESIGN_REVIEW", "AUTO_REVIEW"));
 
     private final List<String> stepNames;
 

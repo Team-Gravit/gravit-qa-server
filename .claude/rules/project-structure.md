@@ -12,18 +12,17 @@ src/main/java/gravit/qa/
 ├── security/            # Spring Security 설정, /admin/me 판정 필터·캐시
 │
 ├── job/                 # 작업 큐(등록·점유·heartbeat·재시도·회수), 작업 처리기 계약
-├── sprint/              # 스프린트, 기준점 (C4)
-├── feature/             # 기능 명세 사본 (C3)
-├── snapshot/            # 수집 스냅샷 (C3)
-├── checklist/           # 체크 항목, 체크 셀, 셀 이력 (C4)
-├── run/                 # 자동 실행, 케이스 결과 (C7)
-├── evidence/            # 증적 파일 (C7)
-├── review/              # 코드 검수 리포트 수집 (C8)
-├── persona/             # 페르소나 매니페스트, 토큰 발급 (C7)
-└── adapter/             # 외부 연동: figma, notion, github, openapi, llm, gravitserver (C3)
+├── sprint/              # 스프린트, 연결 상태, 준비 단계·단위 진행, 명세 로드·QA 준비 처리기
+├── feature/             # 기능 명세 사본, 스프린트 대상 기능(기준 명세), 명세 페이지 해석
+├── reflection/          # 수정 이력 반영 제안, 승인 시 Notion 반영
+├── snapshot/            # 수집 스냅샷 (파일 저장, 행)
+├── checklist/           # 체크 항목, 체크 셀, 셀 이력, 체크리스트 생성
+├── designReview/        # 디자인 검수 항목, 이력, Figma 시안과 명세 비교
+├── autoReview/          # 1차 판정: 저장소 코드 선택, 나눠 담기, 판정 (엔티티 없음, 결과는 checklist 셀)
+└── adapter/             # 외부 연동: figma, notion, github, openapi, llm
 ```
 
-괄호 안은 해당 패키지를 만드는 단계다. 아직 없는 패키지는 그 단계에서 만든다.
+자동 실행(run), 증적(evidence), 리뷰 수집(review), 페르소나(persona) 패키지는 QA 흐름 재설계(D13)로 없앴다.
 
 ## 도메인 패키지 내부 구조
 
@@ -53,7 +52,7 @@ src/main/java/gravit/qa/
 - `facade/` - 여러 도메인 Service를 조합할 때 (`@Facade`)
 - `support/` - 도메인 보조 로직. `job/support/`에는 작업 실행기(`JobRunner`)와 처리기 계약(`JobHandler`, `JobContext`)을 둔다
 - `scheduler/` - 스케줄
-- `handler/` - 도메인별 `JobHandler` 구현 (예: `sprint/handler/SetupJobHandler`)
+- `handler/` - 도메인별 `JobHandler` 구현 (예: `sprint/handler/SpecLoadJobHandler`)
 - `infrastructure/` - 외부 연동, `service/port/` 구현
 - `config/` - 도메인 전용 설정과 props
 
@@ -67,4 +66,4 @@ JPA 엔티티 없이 `repository/custom/JobQueueRepository` + `JdbcTemplate`으�
 - 새 작업 처리는 `JobHandler`를 구현한 빈으로 만든다. 유형당 처리기는 하나다
 - 단계는 `JobType`에 정의된 이름으로 `context.step("NAME", ...)`을 호출한다. 단계 경계마다 취소 요청을 확인한다
 - 재시도해도 소용없는 실패는 `NonRetryableJobException`을 던진다. 그 외 예외는 재시도 대상이다
-- 처리기는 같은 입력으로 다시 실행해도 결과가 같아야 한다(재시도·회수 시 처음부터 다시 실행된다)
+- 처리기는 같은 입력으로 다시 실행해도 결과가 같아야 한다. 재시도·회수 때 처리기는 처음부터 다시 불리지만, 끝난 단계(`sprint_step`)와 끝난 단위(`prepare_unit`)는 건너뛴다(`SetupStepRunner`)

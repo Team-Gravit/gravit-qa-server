@@ -8,10 +8,12 @@ import java.util.List;
 
 @ConfigurationProperties("qa.worker")
 public record WorkerProps(
-        @DefaultValue("true") boolean enabled,
+        @DefaultValue("true")
+        boolean enabled,
 
         String id,
 
-        @DefaultValue List<JobType> jobTypes
+        @DefaultValue
+        List<JobType> jobTypes
 ) {
 }

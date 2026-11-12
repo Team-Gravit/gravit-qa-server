@@ -27,6 +27,7 @@ dependencies {
     // Web
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
+    implementation 'org.openapitools:jackson-databind-nullable:0.2.6'
 
     // Security
     implementation 'org.springframework.boot:spring-boot-starter-security'
@@ -48,6 +49,11 @@ dependencies {
     // API Docs
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.9'
 
+    // LLM
+    implementation platform('org.springframework.ai:spring-ai-bom:1.1.8')
+    implementation 'org.springframework.ai:spring-ai-openai'
+    implementation 'com.networknt:json-schema-validator:1.5.9'
+
     // Monitoring
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
 
@@ -63,10 +69,26 @@ dependencies {
 }
 
 tasks.named('test') {
-    useJUnitPlatform()
+    useJUnitPlatform {
+        excludeTags 'live'
+    }
     maxHeapSize = '1g'
     testLogging {
         events 'failed'
+        exceptionFormat 'full'
+    }
+}
+
+tasks.register('liveTest', Test) {
+    description = '실제 외부 서비스를 호출하는 스모크 테스트 (@Tag("live"))'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform {
+        includeTags 'live'
+    }
+    testLogging {
+        events 'passed', 'skipped', 'failed'
         exceptionFormat 'full'
     }
 }
