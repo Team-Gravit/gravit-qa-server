@@ -9,13 +9,13 @@ public record PartProgressResponse(
         ProgressPart part,
 
         @Schema(
-                description = "검수할 수 (NOT_APPLICABLE 제외). DESIGN은 디자인 항목, 나머지는 1차와 2차 셀 합계",
+                description = "검수할 수 (NOT_APPLICABLE 제외). DESIGN은 디자인 항목(사람이 해당 없음으로 바꾼 항목 제외), 나머지는 1차와 2차 셀 합계",
                 requiredMode = Schema.RequiredMode.REQUIRED
         )
         long total,
 
         @Schema(
-                description = "UNCHECKED가 아닌 수",
+                description = "PASS와 FAIL 수",
                 requiredMode = Schema.RequiredMode.REQUIRED
         )
         long checked,

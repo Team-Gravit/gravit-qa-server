@@ -22,6 +22,7 @@ import org.hibernate.type.SqlTypes;
 
 import java.util.List;
 
+import static gravit.qa.global.exception.domain.CustomErrorCode.CHECKLIST_CLASSIFICATION_INVALID;
 import static gravit.qa.global.exception.domain.CustomErrorCode.VERSION_CONFLICT;
 
 @Entity
@@ -125,7 +126,6 @@ public class ChecklistItem extends BaseEntity {
             String title,
             String expected,
             List<Part> parts,
-            Classification classification,
             int sortOrder
     ) {
         return ChecklistItem.builder()
@@ -134,7 +134,7 @@ public class ChecklistItem extends BaseEntity {
                 .title(title)
                 .expected(expected)
                 .parts(sortParts(parts))
-                .classification(classification)
+                .classification(Classification.MANUAL)
                 .specRowIds(List.of())
                 .sourceRefs(List.of())
                 .origin(ItemOrigin.HUMAN)
@@ -159,12 +159,19 @@ public class ChecklistItem extends BaseEntity {
     }
 
     public void changeClassification(Classification classification) {
+        requireMovableTo(classification);
         this.classification = classification;
     }
 
     public void requireVersion(int expected) {
         if (version != expected) {
             throw new RestApiException(VERSION_CONFLICT);
+        }
+    }
+
+    private void requireMovableTo(Classification target) {
+        if (target != this.classification && target != Classification.MANUAL) {
+            throw new RestApiException(CHECKLIST_CLASSIFICATION_INVALID);
         }
     }
 

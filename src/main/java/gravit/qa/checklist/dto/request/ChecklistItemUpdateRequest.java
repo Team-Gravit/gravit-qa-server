@@ -21,7 +21,7 @@ public record ChecklistItemUpdateRequest(
         @Schema(description = "적용 파트. 빠진 파트의 셀은 NOT_APPLICABLE이 된다")
         Set<Part> parts,
 
-        @Schema(description = "분류. AUTO면 1차, MANUAL이면 2차 체크리스트로 옮겨진다")
+        @Schema(description = "분류. AUTO 항목을 MANUAL(2차)로 옮길 때만 쓴다. MANUAL을 AUTO로 바꾸면 400")
         Classification classification,
 
         @NotNull

@@ -97,7 +97,7 @@ public class AutoReviewStep {
             AutoReviewResultDto result = autoReviewer.review(feature, part, entry.getValue(), selection, context);
 
             List<CellJudgmentDto> judgments = result.judgments().stream()
-                    .map(judgment -> CellJudgmentDto.of(judgment.itemId(), part, judgment.verdict().toCellState(), judgment.reason()))
+                    .map(judgment -> CellJudgmentDto.of(judgment.itemId(), part, judgment.verdict().toCellState(), judgment.reason(), judgment.evidence()))
                     .toList();
             Map<String, Object> detail = new LinkedHashMap<>();
             detail.put("items", entry.getValue().size());
