@@ -40,11 +40,11 @@ public interface DesignReviewControllerDocs {
 
     @Operation(
             summary = "디자인 검수 항목 상태 변경",
-            description = "🔐 <strong>관리자 토큰 필요</strong><br>MANUAL_REVIEW에서만 가능. UNCHECKED, PASS, FAIL, NOT_APPLICABLE(해당 없음)을 받고 이력을 남긴다. NOT_APPLICABLE은 진행도 total에서 빠지고 종료를 막지 않는다"
+            description = "🔐 <strong>관리자 토큰 필요</strong><br>MANUAL_REVIEW에서만 가능. UNCHECKED, PASS, FAIL, NOT_APPLICABLE(해당 없음)을 받고 이력을 남긴다. NOT_APPLICABLE은 진행도 total에서 빠지고 종료를 막지 않는다. FAIL로 바꿀 때 reason(선택)을 남길 수 있다. 상태가 같으면 바꾸지 않되, 이미 FAIL인 항목에 다른 reason을 보내면 사유만 바꾼다"
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "✅ 디자인 검수 항목 변경 성공"),
-            @ApiResponse(responseCode = "400", description = "🚨 요청 형식 오류",
+            @ApiResponse(responseCode = "400", description = "🚨 reason 500자 초과, 요청 형식 오류",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class),
                             examples = @ExampleObject(value = "{\"error\": \"GLOBAL_4001\", \"message\": \"잘못된 요청 파라미터입니다.\"}"))),
             @ApiResponse(responseCode = "404", description = "🚨 디자인 검수 항목 없음",

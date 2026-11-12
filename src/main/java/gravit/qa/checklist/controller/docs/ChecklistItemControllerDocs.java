@@ -84,11 +84,11 @@ public interface ChecklistItemControllerDocs {
 
     @Operation(
             summary = "셀 상태 변경",
-            description = "🔐 <strong>관리자 토큰 필요</strong><br>MANUAL_REVIEW에서만 가능. 1차 판정 결과도 바꿀 수 있다. UNCHECKED, PASS, FAIL만 받는다"
+            description = "🔐 <strong>관리자 토큰 필요</strong><br>MANUAL_REVIEW에서만 가능. 1차 판정 결과도 바꿀 수 있다. UNCHECKED, PASS, FAIL만 받는다. FAIL로 바꿀 때 reason(선택)을 남길 수 있다. 상태가 같으면 바꾸지 않되, 이미 FAIL인 셀에 다른 reason을 보내면 사유만 바꾸고 근거는 그대로 둔다"
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "✅ 셀 변경 성공"),
-            @ApiResponse(responseCode = "400", description = "🚨 NOT_APPLICABLE 요청, 요청 형식 오류",
+            @ApiResponse(responseCode = "400", description = "🚨 NOT_APPLICABLE 요청, reason 500자 초과, 요청 형식 오류",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class),
                             examples = {
                                     @ExampleObject(name = "CHECKLIST_4001", value = "{\"error\": \"CHECKLIST_4001\", \"message\": \"셀은 UNCHECKED, PASS, FAIL로만 바꿀 수 있습니다.\"}"),

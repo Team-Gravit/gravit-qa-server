@@ -21,11 +21,11 @@ public record CheckCellResponse(
         )
         CellSource source,
 
-        @Schema(description = "1차 판정 사유 또는 판정 초기화 사유. 사람이 바꾸면 null")
+        @Schema(description = "1차 판정 사유, 판정 초기화 사유, 또는 사람이 Fail로 바꿀 때 남긴 사유")
         String reason,
 
         @Schema(
-                description = "1차 판정 근거 코드 위치. 1차 판정이 아니면 빈 배열",
+                description = "1차 판정 근거 코드 위치. 사람이 FAIL 사유만 고치면 그대로 두고, 그 밖의 사람 변경과 판정 초기화는 빈 배열",
                 requiredMode = Schema.RequiredMode.REQUIRED
         )
         List<CodeEvidenceResponse> evidence,

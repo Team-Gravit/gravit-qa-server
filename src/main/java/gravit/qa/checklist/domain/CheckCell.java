@@ -117,18 +117,26 @@ public class CheckCell {
             long adminId,
             LocalDateTime now
     ) {
-        if (!isApplicable() || (state == CellState.UNCHECKED && source == CellSource.MANUAL)) {
+        if (!isApplicable()) {
             return Optional.empty();
         }
         return Optional.of(change(CellState.UNCHECKED, CellSource.MANUAL, reason, List.of(), adminId, now));
     }
 
-    public CheckCellHistory check(
+    public Optional<CheckCellHistory> check(
             CellState target,
+            String reason,
             long adminId,
             LocalDateTime now
     ) {
-        return change(target, CellSource.MANUAL, null, List.of(), adminId, now);
+        String failReason = target == CellState.FAIL ? reason : null;
+        if (state != target) {
+            return Optional.of(change(target, CellSource.MANUAL, failReason, List.of(), adminId, now));
+        }
+        if (isFailReasonRevision(target, failReason)) {
+            return Optional.of(change(target, CellSource.MANUAL, failReason, evidence, adminId, now));
+        }
+        return Optional.empty();
     }
 
     public CheckCellHistory judge(
@@ -144,6 +152,13 @@ public class CheckCell {
         if (version == null || version != expected) {
             throw new RestApiException(VERSION_CONFLICT);
         }
+    }
+
+    private boolean isFailReasonRevision(
+            CellState target,
+            String failReason
+    ) {
+        return state == CellState.FAIL && target == CellState.FAIL && failReason != null && !failReason.equals(reason);
     }
 
     private CheckCellHistory change(

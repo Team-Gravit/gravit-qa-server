@@ -130,17 +130,22 @@ public class DesignReviewItem extends BaseEntity {
                 .build();
     }
 
-    public DesignReviewItemHistory change(
+    public Optional<DesignReviewItemHistory> change(
             CellState target,
+            String reason,
             long adminId,
             LocalDateTime now
     ) {
-        DesignReviewItemHistory history = DesignReviewItemHistory.of(id, state, target, CellSource.MANUAL, null, adminId, now);
+        String failReason = target == CellState.FAIL ? reason : null;
+        if (state == target && !isFailReasonRevision(target, failReason)) {
+            return Optional.empty();
+        }
+        DesignReviewItemHistory history = DesignReviewItemHistory.of(id, state, target, CellSource.MANUAL, failReason, adminId, now);
         this.state = target;
         this.source = CellSource.MANUAL;
-        this.reason = null;
+        this.reason = failReason;
         this.updatedBy = adminId;
-        return history;
+        return Optional.of(history);
     }
 
     public void changeTitle(String title) {
@@ -151,20 +156,17 @@ public class DesignReviewItem extends BaseEntity {
         this.expected = expected;
     }
 
-    public Optional<DesignReviewItemHistory> resetJudgment(
+    public DesignReviewItemHistory resetJudgment(
             String reason,
             long adminId,
             LocalDateTime now
     ) {
-        if (state == CellState.UNCHECKED && source == CellSource.MANUAL) {
-            return Optional.empty();
-        }
         DesignReviewItemHistory history = DesignReviewItemHistory.of(id, state, CellState.UNCHECKED, CellSource.MANUAL, reason, adminId, now);
         this.state = CellState.UNCHECKED;
         this.source = CellSource.MANUAL;
         this.reason = reason;
         this.updatedBy = adminId;
-        return Optional.of(history);
+        return history;
     }
 
     public DesignReviewItemHistory initialHistory(LocalDateTime now) {
@@ -175,5 +177,12 @@ public class DesignReviewItem extends BaseEntity {
         if (version != expected) {
             throw new RestApiException(VERSION_CONFLICT);
         }
+    }
+
+    private boolean isFailReasonRevision(
+            CellState target,
+            String failReason
+    ) {
+        return state == CellState.FAIL && target == CellState.FAIL && failReason != null && !failReason.equals(reason);
     }
 }

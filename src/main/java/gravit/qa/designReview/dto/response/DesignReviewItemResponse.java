@@ -51,7 +51,7 @@ public record DesignReviewItemResponse(
         )
         CellSource source,
 
-        @Schema(description = "자동 비교 사유 또는 판정 초기화 사유. 사람이 상태를 바꾸면 null")
+        @Schema(description = "자동 비교 사유, 판정 초기화 사유, 또는 사람이 Fail로 바꿀 때 남긴 사유")
         String reason,
 
         @Schema(

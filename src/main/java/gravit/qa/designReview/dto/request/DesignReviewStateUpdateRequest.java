@@ -17,6 +17,12 @@ public record DesignReviewStateUpdateRequest(
                 description = "디자인 검수 항목 낙관적 잠금 값",
                 requiredMode = Schema.RequiredMode.REQUIRED
         )
-        Integer version
+        Integer version,
+
+        @Schema(
+                description = "Fail 사유(선택). state가 FAIL일 때만 저장하고 그 밖에는 무시한다. 앞뒤 공백을 지운 뒤 500자까지, 빈 문자열은 null로 본다. 이미 FAIL인 항목에 다른 사유를 보내면 사유만 바꾼다",
+                example = "로그인 버튼 순서가 명세와 반대다"
+        )
+        String reason
 ) {
 }
