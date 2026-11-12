@@ -1,5 +1,6 @@
 package gravit.qa.checklist.domain;
 
+import gravit.qa.checklist.dto.internal.CodeEvidenceDto;
 import gravit.qa.feature.domain.Part;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -113,6 +114,64 @@ class CheckCellTest {
                 softly.assertThat(history.getSource()).isEqualTo(CellSource.MANUAL);
                 softly.assertThat(history.getChangedAt()).isEqualTo(NOW);
             });
+        }
+    }
+
+    @Nested
+    @DisplayName("1차 판정할 때")
+    class 판정 {
+
+        private static final CodeEvidenceDto EVIDENCE = CodeEvidenceDto.of("gravit-server/src/main/java/gravit/code/notice/service/NoticeQueryService.java", 46, 50);
+
+        @Test
+        void 사유와_근거를_셀과_이력에_따로_남긴다() {
+            // given
+            CheckCell server = 셀(Part.SERVER, List.of(Part.SERVER));
+
+            // when
+            CheckCellHistory history = server.judge(CellState.PASS, "없는 공지는 NOTICE_NOT_FOUND를 던진다", List.of(EVIDENCE), NOW);
+
+            // then
+            assertSoftly(softly -> {
+                softly.assertThat(server.getState()).isEqualTo(CellState.PASS);
+                softly.assertThat(server.getSource()).isEqualTo(CellSource.AUTO);
+                softly.assertThat(server.getReason()).isEqualTo("없는 공지는 NOTICE_NOT_FOUND를 던진다");
+                softly.assertThat(server.getEvidence()).containsExactly(EVIDENCE);
+                softly.assertThat(history.getReason()).isEqualTo("없는 공지는 NOTICE_NOT_FOUND를 던진다");
+                softly.assertThat(history.getEvidence()).containsExactly(EVIDENCE);
+                softly.assertThat(history.getChangedBy()).isNull();
+            });
+        }
+
+        @Test
+        void 사람이_바꾸면_근거를_비운다() {
+            // given
+            CheckCell server = 셀(Part.SERVER, List.of(Part.SERVER));
+            server.judge(CellState.FAIL, "이전, 다음 필드가 없다", List.of(EVIDENCE), NOW);
+
+            // when
+            CheckCellHistory history = server.check(CellState.PASS, ADMIN_ID, NOW);
+
+            // then
+            assertThat(server.getEvidence()).isEmpty();
+            assertThat(server.getReason()).isNull();
+            assertThat(history.getEvidence()).isEmpty();
+        }
+
+        @Test
+        void 항목_수정으로_초기화하면_근거를_비우고_초기화_사유를_남긴다() {
+            // given
+            CheckCell server = 셀(Part.SERVER, List.of(Part.SERVER));
+            server.judge(CellState.PASS, "코드에서 확인", List.of(EVIDENCE), NOW);
+
+            // when
+            Optional<CheckCellHistory> history = server.resetJudgment(REASON, ADMIN_ID, NOW);
+
+            // then
+            assertThat(server.getState()).isEqualTo(CellState.UNCHECKED);
+            assertThat(server.getReason()).isEqualTo(REASON);
+            assertThat(server.getEvidence()).isEmpty();
+            assertThat(history).hasValueSatisfying(value -> assertThat(value.getEvidence()).isEmpty());
         }
     }
 

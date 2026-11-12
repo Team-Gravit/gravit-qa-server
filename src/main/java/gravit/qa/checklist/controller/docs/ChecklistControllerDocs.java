@@ -40,7 +40,7 @@ public interface ChecklistControllerDocs {
 
     @Operation(
             summary = "체크 항목 추가",
-            description = "🔐 <strong>관리자 토큰 필요</strong><br>체크리스트 생성이 끝난 뒤(DESIGN_REVIEW, AUTO_REVIEW, MANUAL_REVIEW), 실행 중인 작업이 없을 때 가능. 셀은 parts에 있으면 UNCHECKED, 없으면 NOT_APPLICABLE로 만든다"
+            description = "🔐 <strong>관리자 토큰 필요</strong><br>체크리스트 생성이 끝난 뒤(DESIGN_REVIEW, AUTO_REVIEW, MANUAL_REVIEW), 실행 중인 작업이 없을 때 가능. 사람이 추가한 항목은 2차(MANUAL)로 고정하고 요청의 classification은 무시한다. 셀은 parts에 있으면 UNCHECKED, 없으면 NOT_APPLICABLE로 만든다"
     )
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "✅ 체크 항목 추가 성공"),

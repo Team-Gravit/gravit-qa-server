@@ -23,6 +23,7 @@ import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 import static gravit.qa.global.exception.domain.CustomErrorCode.VERSION_CONFLICT;
 
@@ -140,6 +141,30 @@ public class DesignReviewItem extends BaseEntity {
         this.reason = null;
         this.updatedBy = adminId;
         return history;
+    }
+
+    public void changeTitle(String title) {
+        this.title = title;
+    }
+
+    public void changeExpected(String expected) {
+        this.expected = expected;
+    }
+
+    public Optional<DesignReviewItemHistory> resetJudgment(
+            String reason,
+            long adminId,
+            LocalDateTime now
+    ) {
+        if (state == CellState.UNCHECKED && source == CellSource.MANUAL) {
+            return Optional.empty();
+        }
+        DesignReviewItemHistory history = DesignReviewItemHistory.of(id, state, CellState.UNCHECKED, CellSource.MANUAL, reason, adminId, now);
+        this.state = CellState.UNCHECKED;
+        this.source = CellSource.MANUAL;
+        this.reason = reason;
+        this.updatedBy = adminId;
+        return Optional.of(history);
     }
 
     public DesignReviewItemHistory initialHistory(LocalDateTime now) {

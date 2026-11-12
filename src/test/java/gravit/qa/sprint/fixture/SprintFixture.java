@@ -5,6 +5,7 @@ import gravit.qa.checklist.domain.CheckCell;
 import gravit.qa.checklist.domain.ChecklistItem;
 import gravit.qa.checklist.domain.Classification;
 import gravit.qa.checklist.dto.internal.ChecklistItemDraftDto;
+import gravit.qa.checklist.dto.internal.CodeEvidenceDto;
 import gravit.qa.checklist.repository.CheckCellRepository;
 import gravit.qa.checklist.repository.ChecklistItemRepository;
 import gravit.qa.designReview.domain.DesignPlatform;
@@ -169,8 +170,18 @@ public class SprintFixture {
             CellState state,
             String reason
     ) {
+        return 셀_판정(itemId, part, state, reason, List.of());
+    }
+
+    public CheckCell 셀_판정(
+            long itemId,
+            Part part,
+            CellState state,
+            String reason,
+            List<CodeEvidenceDto> evidence
+    ) {
         CheckCell cell = checkCellRepository.findByItemIdAndPart(itemId, part).orElseThrow();
-        cell.judge(state, reason, 기준_시각());
+        cell.judge(state, reason, evidence, 기준_시각());
         return checkCellRepository.save(cell);
     }
 

@@ -40,10 +40,9 @@ public record ChecklistItemCreateRequest(
         )
         Set<Part> parts,
 
-        @NotNull
         @Schema(
-                description = "AUTO면 1차, MANUAL이면 2차 체크리스트",
-                requiredMode = Schema.RequiredMode.REQUIRED
+                description = "무시한다. 사람이 추가한 항목은 2차(MANUAL) 체크리스트로 고정된다",
+                deprecated = true
         )
         Classification classification
 ) {

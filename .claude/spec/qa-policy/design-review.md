@@ -26,5 +26,17 @@
 
 ## 사람 변경
 
-- `PUT /design-review-items/{id}` `{state, version}`: MANUAL_REVIEW에서만. UNCHECKED, PASS, FAIL(NOT_APPLICABLE은 400 `DESIGN_4001`)
+- `PUT /design-review-items/{id}` `{state, version}`: MANUAL_REVIEW에서만. UNCHECKED, PASS, FAIL, NOT_APPLICABLE
+  - NOT_APPLICABLE(해당 없음)은 사람만 고른다. Figma 프레임이 없는 항목처럼 검수 대상이 아닐 때 쓴다
+  - 체크 셀과 달리 해당 없음 항목도 다시 바꿀 수 있다(`editable`은 MANUAL_REVIEW면 true)
 - 바꾸면 `source = MANUAL`, `reason = null`, 이력 1건. `GET /design-review-items/{id}/history`는 최신순 `{state, source, reason, updatedBy, updatedAt}`
+- 진행도 DESIGN의 `total`과 화면 `completionRate`의 분모에서 NOT_APPLICABLE을 뺀다. 종료 조건은 UNCHECKED 0이라 해당 없음은 종료를 막지 않는다
+
+## 항목 수정, 삭제
+
+- MANUAL_REVIEW이고 실행 중인 작업이 없을 때만(아니면 409 `SPRINT_4092`). 체크 항목 편집과 달리 DESIGN_REVIEW, AUTO_REVIEW에서는 안 된다
+- `PATCH /design-review-items/{id}` `{title?, expected?, version}`: 전달한 필드만 바꾼다(앞뒤 공백 제거 후 비교)
+  - 행위나 설명이 바뀌면 상태를 UNCHECKED, `source = MANUAL`, `reason = "항목 수정으로 판정 초기화"`로 되돌리고 이력 1건. 해당 없음이던 항목도 UNCHECKED가 된다
+  - 이미 UNCHECKED이고 `source = MANUAL`이면 이력을 남기지 않는다
+- `DELETE /design-review-items/{id}?version=` → 204. 이력도 지워진다(FK `ON DELETE CASCADE`). `version`이 없으면 400 `GLOBAL_4001`
+- 낙관적 잠금: `version`이 다르면 409 `GLOBAL_4091`

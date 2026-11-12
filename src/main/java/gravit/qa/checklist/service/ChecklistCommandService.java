@@ -74,7 +74,6 @@ public class ChecklistCommandService {
                 request.title().trim(),
                 request.expected().trim(),
                 List.copyOf(request.parts()),
-                request.classification(),
                 sortOrder
         ));
         List<CheckCell> cells = checkCellRepository.saveAll(CheckCell.initialize(item.getId(), item.getParts()));
@@ -94,16 +93,16 @@ public class ChecklistCommandService {
         item.requireVersion(request.version());
 
         boolean contentChanged = false;
+        if (request.classification() != null && request.classification() != item.getClassification()) {
+            item.changeClassification(request.classification());
+            contentChanged = true;
+        }
         if (request.title() != null && !request.title().trim().equals(item.getTitle())) {
             item.changeTitle(request.title().trim());
             contentChanged = true;
         }
         if (request.expected() != null && !request.expected().trim().equals(item.getExpected())) {
             item.changeExpected(request.expected().trim());
-            contentChanged = true;
-        }
-        if (request.classification() != null && request.classification() != item.getClassification()) {
-            item.changeClassification(request.classification());
             contentChanged = true;
         }
 
@@ -168,7 +167,7 @@ public class ChecklistCommandService {
         for (CellJudgmentDto judgment : judgments) {
             CheckCell cell = findCell(judgment.itemId(), judgment.part());
             if (cell.isApplicable()) {
-                histories.add(cell.judge(judgment.state(), judgment.reason(), now));
+                histories.add(cell.judge(judgment.state(), judgment.reason(), judgment.evidence(), now));
             }
         }
         checkCellHistoryRepository.saveAll(histories);

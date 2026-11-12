@@ -26,13 +26,16 @@ public interface ChecklistItemControllerDocs {
 
     @Operation(
             summary = "체크 항목 수정",
-            description = "🔐 <strong>관리자 토큰 필요</strong><br>전달한 필드만 바꾼다. 행위, 설명, 파트, 분류가 바뀌면 그 항목 셀의 판정을 UNCHECKED로 되돌린다. parts에서 빠진 파트의 셀은 NOT_APPLICABLE이 된다"
+            description = "🔐 <strong>관리자 토큰 필요</strong><br>전달한 필드만 바꾼다. 행위, 설명, 파트, 분류가 바뀌면 그 항목 셀의 판정을 UNCHECKED로 되돌린다. parts에서 빠진 파트의 셀은 NOT_APPLICABLE이 된다. 분류는 AUTO에서 MANUAL로만 바꿀 수 있다"
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "✅ 체크 항목 수정 성공"),
-            @ApiResponse(responseCode = "400", description = "🚨 요청 형식 오류",
+            @ApiResponse(responseCode = "400", description = "🚨 MANUAL을 AUTO로 바꾸려 함, 요청 형식 오류",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class),
-                            examples = @ExampleObject(value = "{\"error\": \"GLOBAL_4001\", \"message\": \"잘못된 요청 파라미터입니다.\"}"))),
+                            examples = {
+                                    @ExampleObject(name = "CHECKLIST_4002", value = "{\"error\": \"CHECKLIST_4002\", \"message\": \"분류는 AUTO에서 MANUAL로만 바꿀 수 있습니다.\"}"),
+                                    @ExampleObject(name = "GLOBAL_4001", value = "{\"error\": \"GLOBAL_4001\", \"message\": \"잘못된 요청 파라미터입니다.\"}")
+                            })),
             @ApiResponse(responseCode = "404", description = "🚨 체크 항목 없음",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class),
                             examples = @ExampleObject(value = "{\"error\": \"CHECKLIST_4041\", \"message\": \"존재하지 않는 체크 항목입니다.\"}"))),
@@ -119,7 +122,7 @@ public interface ChecklistItemControllerDocs {
 
     @Operation(
             summary = "셀 변경 이력",
-            description = "🔐 <strong>관리자 토큰 필요</strong><br>최신순. 1차 판정(source=AUTO)과 판정 초기화의 사유(reason)를 함께 내려준다"
+            description = "🔐 <strong>관리자 토큰 필요</strong><br>최신순. 1차 판정(source=AUTO)과 판정 초기화의 사유(reason)를 함께 내려준다. 1차 판정 이력에는 근거 코드 위치(evidence)가 있다"
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "✅ 셀 이력 조회 성공"),
