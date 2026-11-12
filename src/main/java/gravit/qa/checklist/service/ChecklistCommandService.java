@@ -15,6 +15,7 @@ import gravit.qa.checklist.repository.CheckCellHistoryRepository;
 import gravit.qa.checklist.repository.CheckCellRepository;
 import gravit.qa.checklist.repository.ChecklistItemRepository;
 import gravit.qa.checklist.support.CheckCellEditPolicy;
+import gravit.qa.checklist.support.FailReasonPolicy;
 import gravit.qa.feature.domain.Part;
 import gravit.qa.global.exception.domain.RestApiException;
 import gravit.qa.global.util.KstTimes;
@@ -27,6 +28,7 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -74,7 +76,6 @@ public class ChecklistCommandService {
                 request.title().trim(),
                 request.expected().trim(),
                 List.copyOf(request.parts()),
-                request.classification(),
                 sortOrder
         ));
         List<CheckCell> cells = checkCellRepository.saveAll(CheckCell.initialize(item.getId(), item.getParts()));
@@ -94,6 +95,10 @@ public class ChecklistCommandService {
         item.requireVersion(request.version());
 
         boolean contentChanged = false;
+        if (request.classification() != null && request.classification() != item.getClassification()) {
+            item.changeClassification(request.classification());
+            contentChanged = true;
+        }
         if (request.title() != null && !request.title().trim().equals(item.getTitle())) {
             item.changeTitle(request.title().trim());
             contentChanged = true;
@@ -102,21 +107,25 @@ public class ChecklistCommandService {
             item.changeExpected(request.expected().trim());
             contentChanged = true;
         }
-        if (request.classification() != null && request.classification() != item.getClassification()) {
-            item.changeClassification(request.classification());
-            contentChanged = true;
-        }
 
         LocalDateTime now = now();
         List<CheckCell> cells = checkCellRepository.findAllByItemId(itemId);
         List<CheckCellHistory> histories = new ArrayList<>();
+        Set<Part> partsRecorded = EnumSet.noneOf(Part.class);
         if (request.parts() != null && !Set.copyOf(item.getParts()).equals(request.parts())) {
             item.changeParts(List.copyOf(request.parts()));
-            cells.forEach(cell -> cell.applyParts(item.getParts(), EDIT_RESET_REASON, adminId, now).ifPresent(histories::add));
+            for (CheckCell cell : cells) {
+                cell.applyParts(item.getParts(), EDIT_RESET_REASON, adminId, now).ifPresent(history -> {
+                    histories.add(history);
+                    partsRecorded.add(cell.getPart());
+                });
+            }
             contentChanged = true;
         }
         if (contentChanged) {
-            cells.forEach(cell -> cell.resetJudgment(EDIT_RESET_REASON, adminId, now).ifPresent(histories::add));
+            cells.stream()
+                    .filter(cell -> !partsRecorded.contains(cell.getPart()))
+                    .forEach(cell -> cell.resetJudgment(EDIT_RESET_REASON, adminId, now).ifPresent(histories::add));
         }
         checkCellHistoryRepository.saveAll(histories);
         checklistItemRepository.flush();
@@ -147,16 +156,17 @@ public class ChecklistCommandService {
         if (request.state() == CellState.NOT_APPLICABLE) {
             throw new RestApiException(CHECK_CELL_STATE_INVALID);
         }
+        String reason = FailReasonPolicy.normalize(request.reason());
 
         findItem(itemId);
         CheckCell cell = findCell(itemId, part);
         CheckCellEditPolicy.requireEditable(cell.getState());
         cell.requireVersion(request.version());
 
-        if (cell.getState() != request.state()) {
-            checkCellHistoryRepository.save(cell.check(request.state(), adminId, now()));
+        cell.check(request.state(), reason, adminId, now()).ifPresent(history -> {
+            checkCellHistoryRepository.save(history);
             checkCellRepository.flush();
-        }
+        });
 
         return CheckCellResponse.of(cell, CheckCellEditPolicy.isEditable(sprintStatus, cell.getState()));
     }
@@ -168,7 +178,7 @@ public class ChecklistCommandService {
         for (CellJudgmentDto judgment : judgments) {
             CheckCell cell = findCell(judgment.itemId(), judgment.part());
             if (cell.isApplicable()) {
-                histories.add(cell.judge(judgment.state(), judgment.reason(), now));
+                histories.add(cell.judge(judgment.state(), judgment.reason(), judgment.evidence(), now));
             }
         }
         checkCellHistoryRepository.saveAll(histories);

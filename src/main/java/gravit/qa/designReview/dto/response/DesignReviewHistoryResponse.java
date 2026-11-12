@@ -18,7 +18,7 @@ public record DesignReviewHistoryResponse(
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED)
         CellSource source,
 
-        @Schema(description = "자동 비교 사유. 사람이 바꾸면 null")
+        @Schema(description = "자동 비교 사유, 판정 초기화 사유, 또는 사람이 Fail로 바꿀 때 남긴 사유")
         String reason,
 
         @Schema(description = "바꾼 관리자 ID. 자동 비교면 null")

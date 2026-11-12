@@ -11,6 +11,9 @@ public record ConnectionResultDto(
         String message
 ) {
 
+    private static final int SHORT_SHA_LENGTH = 7;
+    private static final String REF_DELIMITER = "@";
+
     public static ConnectionResultDto connected(ConnectionTarget target) {
         return new ConnectionResultDto(target, true, null, null, null);
     }
@@ -38,5 +41,12 @@ public record ConnectionResultDto(
                 connection.getCommitSha(),
                 connection.getMessage()
         );
+    }
+
+    public String ref() {
+        if (commitSha == null) {
+            return null;
+        }
+        return branch + REF_DELIMITER + commitSha.substring(0, Math.min(SHORT_SHA_LENGTH, commitSha.length()));
     }
 }

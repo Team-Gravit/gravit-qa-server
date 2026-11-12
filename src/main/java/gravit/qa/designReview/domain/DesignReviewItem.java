@@ -23,6 +23,7 @@ import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 import static gravit.qa.global.exception.domain.CustomErrorCode.VERSION_CONFLICT;
 
@@ -129,15 +130,41 @@ public class DesignReviewItem extends BaseEntity {
                 .build();
     }
 
-    public DesignReviewItemHistory change(
+    public Optional<DesignReviewItemHistory> change(
             CellState target,
+            String reason,
             long adminId,
             LocalDateTime now
     ) {
-        DesignReviewItemHistory history = DesignReviewItemHistory.of(id, state, target, CellSource.MANUAL, null, adminId, now);
+        String failReason = target == CellState.FAIL ? reason : null;
+        if (state == target && !isFailReasonRevision(target, failReason)) {
+            return Optional.empty();
+        }
+        DesignReviewItemHistory history = DesignReviewItemHistory.of(id, state, target, CellSource.MANUAL, failReason, adminId, now);
         this.state = target;
         this.source = CellSource.MANUAL;
-        this.reason = null;
+        this.reason = failReason;
+        this.updatedBy = adminId;
+        return Optional.of(history);
+    }
+
+    public void changeTitle(String title) {
+        this.title = title;
+    }
+
+    public void changeExpected(String expected) {
+        this.expected = expected;
+    }
+
+    public DesignReviewItemHistory resetJudgment(
+            String reason,
+            long adminId,
+            LocalDateTime now
+    ) {
+        DesignReviewItemHistory history = DesignReviewItemHistory.of(id, state, CellState.UNCHECKED, CellSource.MANUAL, reason, adminId, now);
+        this.state = CellState.UNCHECKED;
+        this.source = CellSource.MANUAL;
+        this.reason = reason;
         this.updatedBy = adminId;
         return history;
     }
@@ -150,5 +177,12 @@ public class DesignReviewItem extends BaseEntity {
         if (version != expected) {
             throw new RestApiException(VERSION_CONFLICT);
         }
+    }
+
+    private boolean isFailReasonRevision(
+            CellState target,
+            String failReason
+    ) {
+        return state == CellState.FAIL && target == CellState.FAIL && failReason != null && !failReason.equals(reason);
     }
 }

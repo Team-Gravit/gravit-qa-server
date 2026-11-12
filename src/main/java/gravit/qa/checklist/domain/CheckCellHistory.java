@@ -1,5 +1,6 @@
 package gravit.qa.checklist.domain;
 
+import gravit.qa.checklist.dto.internal.CodeEvidenceDto;
 import gravit.qa.feature.domain.Part;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -13,8 +14,11 @@ import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Entity
 @Getter
@@ -48,6 +52,10 @@ public class CheckCellHistory {
     @Column(name = "reason")
     private String reason;
 
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "evidence", nullable = false)
+    private List<CodeEvidenceDto> evidence;
+
     @Column(name = "changed_by")
     private Long changedBy;
 
@@ -62,6 +70,7 @@ public class CheckCellHistory {
             CellState toState,
             CellSource source,
             String reason,
+            List<CodeEvidenceDto> evidence,
             Long changedBy,
             LocalDateTime changedAt
     ) {
@@ -71,6 +80,7 @@ public class CheckCellHistory {
         this.toState = toState;
         this.source = source;
         this.reason = reason;
+        this.evidence = evidence;
         this.changedBy = changedBy;
         this.changedAt = changedAt;
     }
@@ -82,6 +92,7 @@ public class CheckCellHistory {
             CellState toState,
             CellSource source,
             String reason,
+            List<CodeEvidenceDto> evidence,
             Long changedBy,
             LocalDateTime changedAt
     ) {
@@ -92,6 +103,7 @@ public class CheckCellHistory {
                 .toState(toState)
                 .source(source)
                 .reason(reason)
+                .evidence(List.copyOf(evidence))
                 .changedBy(changedBy)
                 .changedAt(changedAt)
                 .build();

@@ -3,10 +3,9 @@ package gravit.qa.checklist.controller;
 import gravit.qa.checklist.domain.CellState;
 import gravit.qa.checklist.domain.ChecklistItem;
 import gravit.qa.checklist.domain.Classification;
+import gravit.qa.checklist.dto.internal.CodeEvidenceDto;
 import gravit.qa.checklist.repository.CheckCellRepository;
 import gravit.qa.checklist.repository.ChecklistItemRepository;
-import gravit.qa.designReview.domain.DesignPlatform;
-import gravit.qa.designReview.domain.DesignReviewItem;
 import gravit.qa.feature.domain.Feature;
 import gravit.qa.feature.domain.Part;
 import gravit.qa.sprint.domain.Sprint;
@@ -109,12 +108,12 @@ class ChecklistControllerIntegrationTest {
     class 항목_편집 {
 
         @Test
-        void 체크리스트_생성_뒤에는_사람이_항목을_추가한다() throws Exception {
+        void 체크리스트_생성_뒤에는_사람이_항목을_추가하고_분류는_요청과_관계없이_MANUAL이다() throws Exception {
             // given
             Sprint sprint = sprintFixture.스프린트(SprintStatus.DESIGN_REVIEW);
             Feature feature = 기능(sprint, false);
 
-            // when & then
+            // when
             mockMvc.perform(post("/api/v1/sprints/" + sprint.getId() + "/checklist-items")
                             .header("Authorization", BEARER)
                             .contentType(MediaType.APPLICATION_JSON)
@@ -124,11 +123,34 @@ class ChecklistControllerIntegrationTest {
                                     """.formatted(feature.getId())))
                     .andExpect(status().isCreated())
                     .andExpect(jsonPath("$.origin").value("HUMAN"))
+                    .andExpect(jsonPath("$.classification").value("MANUAL"))
                     .andExpect(jsonPath("$.cells", hasSize(3)))
                     .andExpect(jsonPath("$.cells[1].part").value("WEB"))
                     .andExpect(jsonPath("$.cells[1].state").value("UNCHECKED"))
                     .andExpect(jsonPath("$.cells[1].editable").value(false))
+                    .andExpect(jsonPath("$.cells[1].evidence", hasSize(0)))
                     .andExpect(jsonPath("$.testRef").doesNotExist());
+
+            // then
+            체크리스트(sprint.getId(), "1").andExpect(jsonPath("$.features", hasSize(0)));
+            체크리스트(sprint.getId(), "2").andExpect(jsonPath("$.features[0].items[0].title").value("로그인 제공자 버튼 순서를 표시한다"));
+        }
+
+        @Test
+        void 분류_없이_추가해도_MANUAL로_만든다() throws Exception {
+            // given
+            Sprint sprint = sprintFixture.스프린트(SprintStatus.MANUAL_REVIEW);
+            Feature feature = 기능(sprint, false);
+
+            // when & then
+            mockMvc.perform(post("/api/v1/sprints/" + sprint.getId() + "/checklist-items")
+                            .header("Authorization", BEARER)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    {"featureId": %d, "title": "행위", "expected": "설명", "parts": ["WEB"]}
+                                    """.formatted(feature.getId())))
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.classification").value("MANUAL"));
         }
 
         @Test
@@ -178,7 +200,7 @@ class ChecklistControllerIntegrationTest {
         }
 
         @Test
-        void 분류를_바꾸면_다른_차수_체크리스트로_옮겨진다() throws Exception {
+        void AUTO를_MANUAL로_바꾸면_2차_체크리스트로_옮겨진다() throws Exception {
             // given
             Sprint sprint = sprintFixture.스프린트(SprintStatus.MANUAL_REVIEW);
             Feature feature = 기능(sprint, false);
@@ -194,6 +216,110 @@ class ChecklistControllerIntegrationTest {
             // then
             체크리스트(sprint.getId(), "1").andExpect(jsonPath("$.features", hasSize(0)));
             체크리스트(sprint.getId(), "2").andExpect(jsonPath("$.features[0].items[0].id").value(item.getId()));
+        }
+
+        @Test
+        void MANUAL을_AUTO로_바꾸면_아무것도_바꾸지_않고_400_CHECKLIST_4002() throws Exception {
+            // given
+            Sprint sprint = sprintFixture.스프린트(SprintStatus.MANUAL_REVIEW);
+            Feature feature = 기능(sprint, false);
+            ChecklistItem item = sprintFixture.항목(sprint.getId(), feature.getId(), Classification.MANUAL, List.of(Part.WEB));
+
+            // when
+            mockMvc.perform(patch("/api/v1/checklist-items/" + item.getId())
+                            .header("Authorization", BEARER)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"title\": \"다른 행위\", \"classification\": \"AUTO\", \"version\": 0}"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.error").value("CHECKLIST_4002"));
+
+            // then
+            ChecklistItem saved = checklistItemRepository.findById(item.getId()).orElseThrow();
+            assertThat(saved.getClassification()).isEqualTo(Classification.MANUAL);
+            assertThat(saved.getTitle()).isEqualTo(item.getTitle());
+        }
+
+        @Test
+        void 분류가_지금과_같으면_변경으로_보지_않는다() throws Exception {
+            // given
+            Sprint sprint = sprintFixture.스프린트(SprintStatus.MANUAL_REVIEW);
+            Feature feature = 기능(sprint, false);
+            ChecklistItem item = sprintFixture.항목(sprint.getId(), feature.getId(), Classification.AUTO, List.of(Part.WEB));
+            sprintFixture.셀_판정(item.getId(), Part.WEB, CellState.PASS, "코드에서 확인");
+
+            // when & then
+            mockMvc.perform(patch("/api/v1/checklist-items/" + item.getId())
+                            .header("Authorization", BEARER)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"classification\": \"AUTO\", \"version\": 0}"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.classification").value("AUTO"))
+                    .andExpect(jsonPath("$.cells[1].state").value("PASS"));
+        }
+
+        @Test
+        void 사람이_둔_UNCHECKED에서_항목을_수정해도_초기화_기록을_1건_남긴다() throws Exception {
+            // given
+            Sprint sprint = sprintFixture.스프린트(SprintStatus.MANUAL_REVIEW);
+            Feature feature = 기능(sprint, false);
+            ChecklistItem item = sprintFixture.항목(sprint.getId(), feature.getId(), Classification.AUTO, List.of(Part.WEB));
+            sprintFixture.셀_판정_기록(item.getId(), Part.WEB, CellState.FAIL, "1차 사유", List.of());
+            셀_변경(item.getId(), "WEB", "UNCHECKED", 1).andExpect(status().isOk());
+
+            // when
+            항목_수정(item.getId(), "{\"title\": \"다른 행위\", \"version\": 0}")
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.cells[1].state").value("UNCHECKED"))
+                    .andExpect(jsonPath("$.cells[1].reason").value("항목 수정으로 판정 초기화"));
+
+            // then
+            셀_이력(item.getId(), "WEB")
+                    .andExpect(jsonPath("$", hasSize(3)))
+                    .andExpect(jsonPath("$[0].fromState").value("UNCHECKED"))
+                    .andExpect(jsonPath("$[0].toState").value("UNCHECKED"))
+                    .andExpect(jsonPath("$[0].source").value("MANUAL"))
+                    .andExpect(jsonPath("$[0].reason").value("항목 수정으로 판정 초기화"));
+        }
+
+        @Test
+        void 같은_값으로_수정하면_초기화_기록을_남기지_않는다() throws Exception {
+            // given
+            Sprint sprint = sprintFixture.스프린트(SprintStatus.MANUAL_REVIEW);
+            Feature feature = 기능(sprint, false);
+            ChecklistItem item = sprintFixture.항목(sprint.getId(), feature.getId(), Classification.MANUAL, List.of(Part.WEB));
+
+            // when
+            항목_수정(item.getId(), "{\"title\": \" 항목 MANUAL \", \"parts\": [\"WEB\"], \"version\": 0}")
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.version").value(0));
+
+            // then
+            셀_이력(item.getId(), "WEB")
+                    .andExpect(jsonPath("$", hasSize(0)));
+        }
+
+        @Test
+        void 다시_들어온_파트_셀은_파트_변경_기록_1건만_남긴다() throws Exception {
+            // given
+            Sprint sprint = sprintFixture.스프린트(SprintStatus.MANUAL_REVIEW);
+            Feature feature = 기능(sprint, false);
+            ChecklistItem item = sprintFixture.항목(sprint.getId(), feature.getId(), Classification.MANUAL, List.of(Part.WEB));
+
+            // when
+            항목_수정(item.getId(), "{\"parts\": [\"WEB\", \"APP\"], \"version\": 0}")
+                    .andExpect(status().isOk());
+
+            // then
+            셀_이력(item.getId(), "APP")
+                    .andExpect(jsonPath("$", hasSize(1)))
+                    .andExpect(jsonPath("$[0].fromState").value("NOT_APPLICABLE"))
+                    .andExpect(jsonPath("$[0].toState").value("UNCHECKED"));
+            셀_이력(item.getId(), "WEB")
+                    .andExpect(jsonPath("$", hasSize(1)))
+                    .andExpect(jsonPath("$[0].fromState").value("UNCHECKED"))
+                    .andExpect(jsonPath("$[0].toState").value("UNCHECKED"));
+            셀_이력(item.getId(), "SERVER")
+                    .andExpect(jsonPath("$", hasSize(0)));
         }
 
         @Test
@@ -247,6 +373,32 @@ class ChecklistControllerIntegrationTest {
         }
 
         @Test
+        void 판정_근거는_사유와_따로_내려주고_사람이_바꾸면_비운다() throws Exception {
+            // given
+            Sprint sprint = sprintFixture.스프린트(SprintStatus.MANUAL_REVIEW);
+            Feature feature = 기능(sprint, false);
+            ChecklistItem item = sprintFixture.항목(sprint.getId(), feature.getId(), Classification.AUTO, List.of(Part.WEB));
+            sprintFixture.셀_판정(item.getId(), Part.WEB, CellState.FAIL, "이전, 다음 링크가 없다",
+                    List.of(CodeEvidenceDto.of("gravit-web/apps/web/src/pages/notice-detail/ui/notice-detail-page.tsx", 73, 84)));
+
+            // when
+            체크리스트(sprint.getId(), "1")
+                    .andExpect(jsonPath("$.features[0].items[0].cells[1].reason").value("이전, 다음 링크가 없다"))
+                    .andExpect(jsonPath("$.features[0].items[0].cells[1].evidence", hasSize(1)))
+                    .andExpect(jsonPath("$.features[0].items[0].cells[1].evidence[0].path").value("gravit-web/apps/web/src/pages/notice-detail/ui/notice-detail-page.tsx"))
+                    .andExpect(jsonPath("$.features[0].items[0].cells[1].evidence[0].startLine").value(73))
+                    .andExpect(jsonPath("$.features[0].items[0].cells[1].evidence[0].endLine").value(84));
+
+            // then
+            셀_변경(item.getId(), "WEB", "PASS", 1)
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.evidence", hasSize(0)));
+            mockMvc.perform(get("/api/v1/checklist-items/" + item.getId() + "/cells/WEB/history").header("Authorization", BEARER))
+                    .andExpect(jsonPath("$[0].source").value("MANUAL"))
+                    .andExpect(jsonPath("$[0].evidence", hasSize(0)));
+        }
+
+        @Test
         void MANUAL_REVIEW가_아니면_409_SPRINT_4092() throws Exception {
             // given
             Sprint sprint = sprintFixture.스프린트(SprintStatus.AUTO_REVIEW);
@@ -274,47 +426,114 @@ class ChecklistControllerIntegrationTest {
     }
 
     @Nested
-    @DisplayName("디자인 검수 항목을 바꿀 때")
-    class 디자인_변경 {
+    @DisplayName("사람이 Fail 사유를 남길 때")
+    class Fail_사유 {
+
+        private static final CodeEvidenceDto EVIDENCE = CodeEvidenceDto.of("gravit-web/apps/web/src/pages/notice-detail/ui/notice-detail-page.tsx", 73, 84);
 
         @Test
-        void MANUAL_REVIEW에서_사람이_바꾸면_이력에_자동_비교와_사람_변경이_남는다() throws Exception {
+        void FAIL로_바꿀_때_보낸_사유는_앞뒤_공백을_지워_셀과_이력에_남긴다() throws Exception {
             // given
             Sprint sprint = sprintFixture.스프린트(SprintStatus.MANUAL_REVIEW);
             Feature feature = 기능(sprint, false);
-            DesignReviewItem item = sprintFixture.디자인_항목(sprint.getId(), feature.getId(), DesignPlatform.WEB, CellState.FAIL);
+            ChecklistItem item = sprintFixture.항목(sprint.getId(), feature.getId(), Classification.MANUAL, List.of(Part.WEB));
 
-            // when & then
-            mockMvc.perform(put("/api/v1/design-review-items/" + item.getId())
-                            .header("Authorization", BEARER)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content("{\"state\": \"PASS\", \"version\": 0}"))
+            // when
+            셀_변경(item.getId(), "WEB", "FAIL", 0, "  버튼 문구가 다르다  ")
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.state").value("PASS"))
+                    .andExpect(jsonPath("$.state").value("FAIL"))
                     .andExpect(jsonPath("$.source").value("MANUAL"))
-                    .andExpect(jsonPath("$.reason").value(nullValue()));
-            mockMvc.perform(get("/api/v1/design-review-items/" + item.getId() + "/history").header("Authorization", BEARER))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$", hasSize(1)))
-                    .andExpect(jsonPath("$[0].state").value("PASS"))
-                    .andExpect(jsonPath("$[0].source").value("MANUAL"))
-                    .andExpect(jsonPath("$[0].updatedBy").value(7));
+                    .andExpect(jsonPath("$.reason").value("버튼 문구가 다르다"))
+                    .andExpect(jsonPath("$.evidence", hasSize(0)));
+
+            // then
+            셀_이력(item.getId(), "WEB")
+                    .andExpect(jsonPath("$[0].toState").value("FAIL"))
+                    .andExpect(jsonPath("$[0].reason").value("버튼 문구가 다르다"));
         }
 
         @Test
-        void NOT_APPLICABLE은_400_DESIGN_4001() throws Exception {
+        void FAIL이_아니면_사유를_무시하고_빈_사유는_null로_본다() throws Exception {
             // given
             Sprint sprint = sprintFixture.스프린트(SprintStatus.MANUAL_REVIEW);
             Feature feature = 기능(sprint, false);
-            DesignReviewItem item = sprintFixture.디자인_항목(sprint.getId(), feature.getId(), DesignPlatform.WEB, CellState.FAIL);
+            ChecklistItem item = sprintFixture.항목(sprint.getId(), feature.getId(), Classification.MANUAL, List.of(Part.WEB, Part.APP));
 
             // when & then
-            mockMvc.perform(put("/api/v1/design-review-items/" + item.getId())
-                            .header("Authorization", BEARER)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content("{\"state\": \"NOT_APPLICABLE\", \"version\": 0}"))
+            셀_변경(item.getId(), "WEB", "PASS", 0, "무시되는 사유")
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.reason").value(nullValue()));
+            셀_변경(item.getId(), "APP", "FAIL", 0, "   ")
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.state").value("FAIL"))
+                    .andExpect(jsonPath("$.reason").value(nullValue()));
+        }
+
+        @Test
+        void 이미_FAIL인_셀에_다른_사유를_보내면_사유만_바꾸고_근거는_그대로_둔다() throws Exception {
+            // given
+            Sprint sprint = sprintFixture.스프린트(SprintStatus.MANUAL_REVIEW);
+            Feature feature = 기능(sprint, false);
+            ChecklistItem item = sprintFixture.항목(sprint.getId(), feature.getId(), Classification.AUTO, List.of(Part.WEB));
+            sprintFixture.셀_판정(item.getId(), Part.WEB, CellState.FAIL, "1차 사유", List.of(EVIDENCE));
+
+            // when
+            셀_변경(item.getId(), "WEB", "FAIL", 1, "사람 사유")
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.state").value("FAIL"))
+                    .andExpect(jsonPath("$.source").value("MANUAL"))
+                    .andExpect(jsonPath("$.reason").value("사람 사유"))
+                    .andExpect(jsonPath("$.evidence", hasSize(1)))
+                    .andExpect(jsonPath("$.evidence[0].path").value(EVIDENCE.path()))
+                    .andExpect(jsonPath("$.version").value(2));
+
+            // then
+            셀_이력(item.getId(), "WEB")
+                    .andExpect(jsonPath("$", hasSize(1)))
+                    .andExpect(jsonPath("$[0].fromState").value("FAIL"))
+                    .andExpect(jsonPath("$[0].toState").value("FAIL"))
+                    .andExpect(jsonPath("$[0].source").value("MANUAL"))
+                    .andExpect(jsonPath("$[0].reason").value("사람 사유"))
+                    .andExpect(jsonPath("$[0].evidence", hasSize(1)));
+        }
+
+        @Test
+        void 이미_FAIL인_셀에_사유_없이_FAIL을_보내면_바꾸지_않는다() throws Exception {
+            // given
+            Sprint sprint = sprintFixture.스프린트(SprintStatus.MANUAL_REVIEW);
+            Feature feature = 기능(sprint, false);
+            ChecklistItem item = sprintFixture.항목(sprint.getId(), feature.getId(), Classification.AUTO, List.of(Part.WEB));
+            sprintFixture.셀_판정(item.getId(), Part.WEB, CellState.FAIL, "1차 사유", List.of(EVIDENCE));
+
+            // when
+            셀_변경(item.getId(), "WEB", "FAIL", 1)
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.source").value("AUTO"))
+                    .andExpect(jsonPath("$.reason").value("1차 사유"))
+                    .andExpect(jsonPath("$.version").value(1));
+
+            // then
+            셀_이력(item.getId(), "WEB")
+                    .andExpect(jsonPath("$", hasSize(0)));
+        }
+
+        @Test
+        void 사유가_앞뒤_공백을_지운_뒤_500자를_넘으면_상태와_관계없이_400_GLOBAL_4001() throws Exception {
+            // given
+            Sprint sprint = sprintFixture.스프린트(SprintStatus.MANUAL_REVIEW);
+            Feature feature = 기능(sprint, false);
+            ChecklistItem item = sprintFixture.항목(sprint.getId(), feature.getId(), Classification.MANUAL, List.of(Part.WEB));
+
+            // when & then
+            셀_변경(item.getId(), "WEB", "FAIL", 0, "가".repeat(501))
                     .andExpect(status().isBadRequest())
-                    .andExpect(jsonPath("$.error").value("DESIGN_4001"));
+                    .andExpect(jsonPath("$.error").value("GLOBAL_4001"));
+            셀_변경(item.getId(), "WEB", "PASS", 0, "가".repeat(501))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.error").value("GLOBAL_4001"));
+            셀_변경(item.getId(), "WEB", "FAIL", 0, "  " + "가".repeat(500) + "  ")
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.reason").value("가".repeat(500)));
         }
     }
 
@@ -344,5 +563,35 @@ class ChecklistControllerIntegrationTest {
                 .header("Authorization", BEARER)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"state\": \"" + state + "\", \"version\": " + version + "}"));
+    }
+
+    private ResultActions 셀_변경(
+            long itemId,
+            String part,
+            String state,
+            int version,
+            String reason
+    ) throws Exception {
+        return mockMvc.perform(put("/api/v1/checklist-items/" + itemId + "/cells/" + part)
+                .header("Authorization", BEARER)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"state\": \"" + state + "\", \"version\": " + version + ", \"reason\": \"" + reason + "\"}"));
+    }
+
+    private ResultActions 항목_수정(
+            long itemId,
+            String body
+    ) throws Exception {
+        return mockMvc.perform(patch("/api/v1/checklist-items/" + itemId)
+                .header("Authorization", BEARER)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body));
+    }
+
+    private ResultActions 셀_이력(
+            long itemId,
+            String part
+    ) throws Exception {
+        return mockMvc.perform(get("/api/v1/checklist-items/" + itemId + "/cells/" + part + "/history").header("Authorization", BEARER));
     }
 }

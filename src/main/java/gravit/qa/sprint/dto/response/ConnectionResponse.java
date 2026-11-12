@@ -24,12 +24,7 @@ public record ConnectionResponse(
         String message
 ) {
 
-    private static final int SHORT_SHA_LENGTH = 7;
-
     public static ConnectionResponse from(ConnectionResultDto connection) {
-        String ref = connection.commitSha() == null
-                ? null
-                : connection.branch() + "@" + connection.commitSha().substring(0, Math.min(SHORT_SHA_LENGTH, connection.commitSha().length()));
-        return new ConnectionResponse(connection.target(), connection.connected(), ref, connection.message());
+        return new ConnectionResponse(connection.target(), connection.connected(), connection.ref(), connection.message());
     }
 }

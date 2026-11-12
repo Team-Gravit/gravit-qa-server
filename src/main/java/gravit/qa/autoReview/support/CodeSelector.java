@@ -37,8 +37,8 @@ public class CodeSelector {
         return switch (part) {
             case SERVER -> {
                 RepoSnapshotDto server = repoSourceReader.tree(GithubRepo.GRAVIT_SERVER, repoToCommitSha.get(GithubRepo.GRAVIT_SERVER));
-                List<String> paths = ServerCodeSelector.select(server.pathToEntry().keySet(), path -> repoSourceReader.read(server, path), endpoints);
-                yield selection(List.of(server), wholeFiles(server, paths));
+                List<SourceFileDto> files = ServerCodeSelector.select(server.pathToEntry().keySet(), path -> repoSourceReader.read(server, path), endpoints);
+                yield selection(List.of(server), files);
             }
             case WEB -> {
                 RepoSnapshotDto web = repoSourceReader.tree(GithubRepo.GRAVIT_WEB, repoToCommitSha.get(GithubRepo.GRAVIT_WEB));

@@ -12,8 +12,10 @@ import gravit.qa.autoReview.dto.internal.CodeChunkDto;
 import gravit.qa.autoReview.dto.internal.CodeChunksDto;
 import gravit.qa.autoReview.dto.internal.CodeEvidenceOutputDto;
 import gravit.qa.autoReview.dto.internal.CodeSelectionDto;
+import gravit.qa.autoReview.dto.internal.SourceFileDto;
 import gravit.qa.checklist.domain.Verdict;
 import gravit.qa.checklist.dto.internal.ChecklistItemDto;
+import gravit.qa.checklist.dto.internal.CodeEvidenceDto;
 import gravit.qa.feature.domain.Part;
 import gravit.qa.feature.dto.internal.SpecRowDto;
 import gravit.qa.feature.dto.internal.SprintFeatureDto;
@@ -42,9 +44,6 @@ public class AutoReviewer {
     private static final String UNKNOWN_PREFIX = "판정 불가: ";
     private static final String INVALID_OUTPUT_REASON = "판정 불가: 1차 판정 출력이 검증을 통과하지 못했습니다";
     private static final String ITEM_BLOCK = "[항목 %d] %s%n- 설명: %s%n- 관련 명세 행: %s";
-    private static final String EVIDENCE_FORMAT = "%s:%d-%d";
-    private static final String EVIDENCE_SUFFIX = " (근거 %s)";
-    private static final String CHUNK_SUFFIX = " (코드 %d/%d부분)";
     private static final String NONE = "(없음)";
     private static final String LINE_BREAK = "\n";
     private static final String DELIMITER = ", ";
@@ -65,7 +64,7 @@ public class AutoReviewer {
     ) {
         if (selection.isEmpty()) {
             List<AutoReviewJudgmentDto> judgments = items.stream()
-                    .map(item -> AutoReviewJudgmentDto.of(item.id(), Verdict.UNKNOWN, NO_CODE_REASON.formatted(part)))
+                    .map(item -> AutoReviewJudgmentDto.unknown(item.id(), NO_CODE_REASON.formatted(part)))
                     .toList();
             return AutoReviewResultDto.of(judgments, 0, 0, 0, List.of(), false);
         }
@@ -91,7 +90,6 @@ public class AutoReviewer {
             CodeChunkDto chunk = chunks.chunks().get(index);
             String user = template.replace(CODE_PLACEHOLDER, chunk.rendered());
             promptChars += user.length();
-            String chunkSuffix = chunks.chunks().size() > 1 ? CHUNK_SUFFIX.formatted(index + 1, chunks.chunks().size()) : "";
 
             try {
                 AutoReviewOutputDto output = llmClient.generate(
@@ -101,13 +99,13 @@ public class AutoReviewer {
                 );
                 for (AutoReviewResultOutputDto result : output.results()) {
                     itemIdToJudgments.computeIfAbsent(result.itemId(), id -> new ArrayList<>())
-                            .add(AutoReviewJudgmentDto.of(result.itemId(), result.verdict(), reasonOf(result) + chunkSuffix));
+                            .add(AutoReviewJudgmentDto.of(result.itemId(), result.verdict(), reasonOf(result), evidenceOf(result, chunk.slices())));
                 }
             } catch (LlmOutputInvalidException e) {
                 log.warn("1차 판정 출력 검증 실패. screenId={}, part={}, chunk={}, errors={}", feature.screenId(), part, index + 1, e.getErrors());
                 failed = true;
                 itemIds.forEach(itemId -> itemIdToJudgments.computeIfAbsent(itemId, id -> new ArrayList<>())
-                        .add(AutoReviewJudgmentDto.of(itemId, Verdict.UNKNOWN, INVALID_OUTPUT_REASON + chunkSuffix)));
+                        .add(AutoReviewJudgmentDto.unknown(itemId, INVALID_OUTPUT_REASON)));
             }
         }
 
@@ -129,18 +127,35 @@ public class AutoReviewer {
             }
         }
         if (judgments.isEmpty()) {
-            return AutoReviewJudgmentDto.of(itemId, Verdict.UNKNOWN, INVALID_OUTPUT_REASON);
+            return AutoReviewJudgmentDto.unknown(itemId, INVALID_OUTPUT_REASON);
         }
         return judgments.getLast();
     }
 
     private String reasonOf(AutoReviewResultOutputDto result) {
         String prefix = result.verdict() == Verdict.UNKNOWN ? UNKNOWN_PREFIX : "";
+        return prefix + result.reason().trim();
+    }
+
+    static List<CodeEvidenceDto> evidenceOf(
+            AutoReviewResultOutputDto result,
+            List<SourceFileDto> slices
+    ) {
         List<CodeEvidenceOutputDto> evidence = result.evidence() == null ? List.of() : result.evidence();
-        String locations = evidence.stream()
-                .map(location -> EVIDENCE_FORMAT.formatted(location.path().trim(), location.startLine(), location.endLine()))
-                .collect(Collectors.joining(DELIMITER));
-        return prefix + result.reason().trim() + (locations.isEmpty() ? "" : EVIDENCE_SUFFIX.formatted(locations));
+        return evidence.stream()
+                .map(location -> CodeEvidenceDto.of(labelOf(location.path().trim(), slices), location.startLine(), location.endLine()))
+                .toList();
+    }
+
+    private static String labelOf(
+            String path,
+            List<SourceFileDto> slices
+    ) {
+        return slices.stream()
+                .filter(slice -> slice.label().equals(path) || slice.path().equals(path))
+                .map(SourceFileDto::label)
+                .findFirst()
+                .orElse(path);
     }
 
     private String itemBlocks(

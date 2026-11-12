@@ -46,12 +46,12 @@ public record DesignReviewItemResponse(
         CellState state,
 
         @Schema(
-                description = "AUTO면 자동 비교, MANUAL이면 사람이 바꾼 결과",
+                description = "AUTO면 자동 비교, MANUAL이면 사람이 바꾸거나 항목 수정으로 초기화한 결과",
                 requiredMode = Schema.RequiredMode.REQUIRED
         )
         CellSource source,
 
-        @Schema(description = "자동 비교 사유. 사람이 바꾸면 null")
+        @Schema(description = "자동 비교 사유, 판정 초기화 사유, 또는 사람이 Fail로 바꿀 때 남긴 사유")
         String reason,
 
         @Schema(

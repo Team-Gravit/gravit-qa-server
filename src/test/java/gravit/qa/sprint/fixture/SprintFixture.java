@@ -5,11 +5,14 @@ import gravit.qa.checklist.domain.CheckCell;
 import gravit.qa.checklist.domain.ChecklistItem;
 import gravit.qa.checklist.domain.Classification;
 import gravit.qa.checklist.dto.internal.ChecklistItemDraftDto;
+import gravit.qa.checklist.dto.internal.CodeEvidenceDto;
+import gravit.qa.checklist.repository.CheckCellHistoryRepository;
 import gravit.qa.checklist.repository.CheckCellRepository;
 import gravit.qa.checklist.repository.ChecklistItemRepository;
 import gravit.qa.designReview.domain.DesignPlatform;
 import gravit.qa.designReview.domain.DesignReviewItem;
 import gravit.qa.designReview.dto.internal.DesignReviewItemDraftDto;
+import gravit.qa.designReview.repository.DesignReviewItemHistoryRepository;
 import gravit.qa.designReview.repository.DesignReviewItemRepository;
 import gravit.qa.feature.domain.Feature;
 import gravit.qa.feature.domain.Part;
@@ -61,7 +64,9 @@ public class SprintFixture {
     private final SprintFeatureRepository sprintFeatureRepository;
     private final ChecklistItemRepository checklistItemRepository;
     private final CheckCellRepository checkCellRepository;
+    private final CheckCellHistoryRepository checkCellHistoryRepository;
     private final DesignReviewItemRepository designReviewItemRepository;
+    private final DesignReviewItemHistoryRepository designReviewItemHistoryRepository;
     private final SpecReflectionRepository specReflectionRepository;
 
     public Sprint 스프린트(SprintStatus status) {
@@ -159,8 +164,73 @@ public class SprintFixture {
             CellState state
     ) {
         CheckCell cell = checkCellRepository.findByItemIdAndPart(itemId, part).orElseThrow();
-        cell.check(state, ADMIN_ID, 기준_시각());
+        cell.check(state, null, ADMIN_ID, 기준_시각());
         return checkCellRepository.save(cell);
+    }
+
+    public CheckCell 셀_체크_기록(
+            long itemId,
+            Part part,
+            CellState state,
+            String reason
+    ) {
+        CheckCell cell = checkCellRepository.findByItemIdAndPart(itemId, part).orElseThrow();
+        cell.check(state, reason, ADMIN_ID, 기준_시각()).ifPresent(checkCellHistoryRepository::save);
+        return checkCellRepository.save(cell);
+    }
+
+    public CheckCell 셀_판정_기록(
+            long itemId,
+            Part part,
+            CellState state,
+            String reason,
+            List<CodeEvidenceDto> evidence
+    ) {
+        CheckCell cell = checkCellRepository.findByItemIdAndPart(itemId, part).orElseThrow();
+        checkCellHistoryRepository.save(cell.judge(state, reason, evidence, 기준_시각()));
+        return checkCellRepository.save(cell);
+    }
+
+    public ChecklistItem 항목(
+            long sprintId,
+            long featureId,
+            Classification classification,
+            List<Part> parts,
+            String title,
+            String expected,
+            List<String> specRowIds,
+            int sortOrder
+    ) {
+        ChecklistItem item = ChecklistItem.generate(
+                sprintId,
+                featureId,
+                ChecklistItemDraftDto.of(title, expected, parts, classification, specRowIds),
+                List.of(),
+                sortOrder
+        );
+        ChecklistItem saved = checklistItemRepository.save(item);
+        checkCellRepository.saveAll(CheckCell.initialize(saved.getId(), saved.getParts()));
+        return saved;
+    }
+
+    public DesignReviewItem 디자인_항목(
+            long sprintId,
+            long featureId,
+            DesignPlatform platform,
+            CellState state,
+            String title,
+            String reason,
+            List<String> figmaNodeIds,
+            int sortOrder
+    ) {
+        DesignReviewItem item = designReviewItemRepository.save(DesignReviewItem.judge(
+                sprintId,
+                featureId,
+                DesignReviewItemDraftDto.of(platform, title, title + " 설명", List.of("C1"), figmaNodeIds, state, reason),
+                sortOrder
+        ));
+        designReviewItemHistoryRepository.save(item.initialHistory(기준_시각()));
+        return item;
     }
 
     public CheckCell 셀_판정(
@@ -169,8 +239,18 @@ public class SprintFixture {
             CellState state,
             String reason
     ) {
+        return 셀_판정(itemId, part, state, reason, List.of());
+    }
+
+    public CheckCell 셀_판정(
+            long itemId,
+            Part part,
+            CellState state,
+            String reason,
+            List<CodeEvidenceDto> evidence
+    ) {
         CheckCell cell = checkCellRepository.findByItemIdAndPart(itemId, part).orElseThrow();
-        cell.judge(state, reason, 기준_시각());
+        cell.judge(state, reason, evidence, 기준_시각());
         return checkCellRepository.save(cell);
     }
 

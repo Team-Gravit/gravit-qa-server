@@ -47,6 +47,7 @@ public enum CustomErrorCode implements ErrorCode {
 
     // Checklist
     CHECK_CELL_STATE_INVALID(BAD_REQUEST, "CHECKLIST_4001", "셀은 UNCHECKED, PASS, FAIL로만 바꿀 수 있습니다."),
+    CHECKLIST_CLASSIFICATION_INVALID(BAD_REQUEST, "CHECKLIST_4002", "분류는 AUTO에서 MANUAL로만 바꿀 수 있습니다."),
     CHECKLIST_ITEM_NOT_FOUND(NOT_FOUND, "CHECKLIST_4041", "존재하지 않는 체크 항목입니다."),
     CHECKLIST_FEATURE_NOT_IN_SPRINT(NOT_FOUND, "CHECKLIST_4042", "스프린트 대상 기능이 아닙니다."),
     CHECK_CELL_NOT_FOUND(NOT_FOUND, "CHECKLIST_4043", "존재하지 않는 체크 셀입니다."),
@@ -54,7 +55,9 @@ public enum CustomErrorCode implements ErrorCode {
 
     // Design Review
     DESIGN_REVIEW_ITEM_NOT_FOUND(NOT_FOUND, "DESIGN_4041", "존재하지 않는 디자인 검수 항목입니다."),
-    DESIGN_REVIEW_STATE_INVALID(BAD_REQUEST, "DESIGN_4001", "디자인 검수 항목은 UNCHECKED, PASS, FAIL로만 바꿀 수 있습니다."),
+
+    // Fix Report
+    FIX_REPORT_NOT_READY(CONFLICT, "FIX_REPORT_4091", "미검수 항목이 남았거나 실행 중인 작업이 있어 수정사항 파일을 만들 수 없습니다."),
 
     // Reflection
     REFLECTION_NOT_FOUND(NOT_FOUND, "REFLECTION_4041", "존재하지 않는 반영 제안입니다."),

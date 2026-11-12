@@ -1,16 +1,17 @@
 package gravit.qa.designReview.dto.request;
 
-import gravit.qa.checklist.domain.CellState;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 
 public record DesignReviewItemUpdateRequest(
-        @NotNull
-        @Schema(
-                description = "UNCHECKED, PASS, FAIL 중 하나",
-                requiredMode = Schema.RequiredMode.REQUIRED
-        )
-        CellState state,
+        @Size(min = 1)
+        @Schema(description = "행위")
+        String title,
+
+        @Size(min = 1)
+        @Schema(description = "설명(비교 내용과 명세 행 번호)")
+        String expected,
 
         @NotNull
         @Schema(

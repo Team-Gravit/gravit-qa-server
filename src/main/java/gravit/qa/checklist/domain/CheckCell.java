@@ -1,5 +1,6 @@
 package gravit.qa.checklist.domain;
 
+import gravit.qa.checklist.dto.internal.CodeEvidenceDto;
 import gravit.qa.feature.domain.Part;
 import gravit.qa.global.exception.domain.RestApiException;
 import jakarta.persistence.Column;
@@ -14,6 +15,8 @@ import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 import java.util.Arrays;
@@ -50,6 +53,10 @@ public class CheckCell {
     @Column(name = "reason")
     private String reason;
 
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "evidence", nullable = false)
+    private List<CodeEvidenceDto> evidence;
+
     @Column(name = "updated_by")
     private Long updatedBy;
 
@@ -71,6 +78,7 @@ public class CheckCell {
         this.part = part;
         this.state = state;
         this.source = source;
+        this.evidence = List.of();
     }
 
     public static List<CheckCell> initialize(
@@ -101,7 +109,7 @@ public class CheckCell {
         if (included == isApplicable()) {
             return Optional.empty();
         }
-        return Optional.of(change(included ? CellState.UNCHECKED : CellState.NOT_APPLICABLE, CellSource.MANUAL, reason, adminId, now));
+        return Optional.of(change(included ? CellState.UNCHECKED : CellState.NOT_APPLICABLE, CellSource.MANUAL, reason, List.of(), adminId, now));
     }
 
     public Optional<CheckCellHistory> resetJudgment(
@@ -109,26 +117,35 @@ public class CheckCell {
             long adminId,
             LocalDateTime now
     ) {
-        if (!isApplicable() || (state == CellState.UNCHECKED && source == CellSource.MANUAL)) {
+        if (!isApplicable()) {
             return Optional.empty();
         }
-        return Optional.of(change(CellState.UNCHECKED, CellSource.MANUAL, reason, adminId, now));
+        return Optional.of(change(CellState.UNCHECKED, CellSource.MANUAL, reason, List.of(), adminId, now));
     }
 
-    public CheckCellHistory check(
+    public Optional<CheckCellHistory> check(
             CellState target,
+            String reason,
             long adminId,
             LocalDateTime now
     ) {
-        return change(target, CellSource.MANUAL, null, adminId, now);
+        String failReason = target == CellState.FAIL ? reason : null;
+        if (state != target) {
+            return Optional.of(change(target, CellSource.MANUAL, failReason, List.of(), adminId, now));
+        }
+        if (isFailReasonRevision(target, failReason)) {
+            return Optional.of(change(target, CellSource.MANUAL, failReason, evidence, adminId, now));
+        }
+        return Optional.empty();
     }
 
     public CheckCellHistory judge(
             CellState target,
             String reason,
+            List<CodeEvidenceDto> evidence,
             LocalDateTime now
     ) {
-        return change(target, CellSource.AUTO, reason, null, now);
+        return change(target, CellSource.AUTO, reason, List.copyOf(evidence), null, now);
     }
 
     public void requireVersion(int expected) {
@@ -137,17 +154,26 @@ public class CheckCell {
         }
     }
 
+    private boolean isFailReasonRevision(
+            CellState target,
+            String failReason
+    ) {
+        return state == CellState.FAIL && target == CellState.FAIL && failReason != null && !failReason.equals(reason);
+    }
+
     private CheckCellHistory change(
             CellState target,
             CellSource source,
             String reason,
+            List<CodeEvidenceDto> evidence,
             Long changedBy,
             LocalDateTime now
     ) {
-        CheckCellHistory history = CheckCellHistory.of(itemId, part, state, target, source, reason, changedBy, now);
+        CheckCellHistory history = CheckCellHistory.of(itemId, part, state, target, source, reason, evidence, changedBy, now);
         this.state = target;
         this.source = source;
         this.reason = reason;
+        this.evidence = evidence;
         this.updatedBy = changedBy;
         this.updatedAt = now;
         return history;

@@ -1,6 +1,7 @@
 package gravit.qa.designReview.controller.docs;
 
 import gravit.qa.designReview.dto.request.DesignReviewItemUpdateRequest;
+import gravit.qa.designReview.dto.request.DesignReviewStateUpdateRequest;
 import gravit.qa.designReview.dto.response.DesignReviewHistoryResponse;
 import gravit.qa.designReview.dto.response.DesignReviewItemResponse;
 import gravit.qa.designReview.dto.response.DesignReviewResponse;
@@ -19,7 +20,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 
 import java.util.List;
 
-@Tag(name = "Design Review API", description = "Figma 시안이 명세에 충실한지 본 디자인 검수 결과 조회, 변경, 이력")
+@Tag(name = "Design Review API", description = "Figma 시안이 명세에 충실한지 본 디자인 검수 결과 조회, 변경, 수정, 삭제, 이력")
 public interface DesignReviewControllerDocs {
 
     @Operation(
@@ -39,16 +40,13 @@ public interface DesignReviewControllerDocs {
 
     @Operation(
             summary = "디자인 검수 항목 상태 변경",
-            description = "🔐 <strong>관리자 토큰 필요</strong><br>MANUAL_REVIEW에서만 가능. UNCHECKED, PASS, FAIL만 받고 이력을 남긴다"
+            description = "🔐 <strong>관리자 토큰 필요</strong><br>MANUAL_REVIEW에서만 가능. UNCHECKED, PASS, FAIL, NOT_APPLICABLE(해당 없음)을 받고 이력을 남긴다. NOT_APPLICABLE은 진행도 total에서 빠지고 종료를 막지 않는다. FAIL로 바꿀 때 reason(선택)을 남길 수 있다. 상태가 같으면 바꾸지 않되, 이미 FAIL인 항목에 다른 reason을 보내면 사유만 바꾼다"
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "✅ 디자인 검수 항목 변경 성공"),
-            @ApiResponse(responseCode = "400", description = "🚨 NOT_APPLICABLE 요청, 요청 형식 오류",
+            @ApiResponse(responseCode = "400", description = "🚨 reason 500자 초과, 요청 형식 오류",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class),
-                            examples = {
-                                    @ExampleObject(name = "DESIGN_4001", value = "{\"error\": \"DESIGN_4001\", \"message\": \"디자인 검수 항목은 UNCHECKED, PASS, FAIL로만 바꿀 수 있습니다.\"}"),
-                                    @ExampleObject(name = "GLOBAL_4001", value = "{\"error\": \"GLOBAL_4001\", \"message\": \"잘못된 요청 파라미터입니다.\"}")
-                            })),
+                            examples = @ExampleObject(value = "{\"error\": \"GLOBAL_4001\", \"message\": \"잘못된 요청 파라미터입니다.\"}"))),
             @ApiResponse(responseCode = "404", description = "🚨 디자인 검수 항목 없음",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class),
                             examples = @ExampleObject(value = "{\"error\": \"DESIGN_4041\", \"message\": \"존재하지 않는 디자인 검수 항목입니다.\"}"))),
@@ -62,10 +60,65 @@ public interface DesignReviewControllerDocs {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class),
                             examples = @ExampleObject(value = "{\"error\": \"GLOBAL_5001\", \"message\": \"예기치 못한 예외가 발생했습니다.\"}")))
     })
+    ResponseEntity<DesignReviewItemResponse> updateDesignReviewItemState(
+            @Parameter(description = "디자인 검수 항목 ID") long itemId,
+            DesignReviewStateUpdateRequest request,
+            @AuthenticationPrincipal LoginAdmin loginAdmin
+    );
+
+    @Operation(
+            summary = "디자인 검수 항목 수정",
+            description = "🔐 <strong>관리자 토큰 필요</strong><br>MANUAL_REVIEW이고 실행 중인 작업이 없을 때 가능. 전달한 필드만 바꾼다. 행위나 설명이 바뀌면 상태를 UNCHECKED, source를 MANUAL로 되돌리고 이력 사유 \"항목 수정으로 판정 초기화\"를 남긴다"
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "✅ 디자인 검수 항목 수정 성공"),
+            @ApiResponse(responseCode = "400", description = "🚨 요청 형식 오류",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class),
+                            examples = @ExampleObject(value = "{\"error\": \"GLOBAL_4001\", \"message\": \"잘못된 요청 파라미터입니다.\"}"))),
+            @ApiResponse(responseCode = "404", description = "🚨 디자인 검수 항목 없음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class),
+                            examples = @ExampleObject(value = "{\"error\": \"DESIGN_4041\", \"message\": \"존재하지 않는 디자인 검수 항목입니다.\"}"))),
+            @ApiResponse(responseCode = "409", description = "🚨 MANUAL_REVIEW가 아님, 실행 중인 작업 있음, version 불일치",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class),
+                            examples = {
+                                    @ExampleObject(name = "SPRINT_4092", value = "{\"error\": \"SPRINT_4092\", \"message\": \"현재 스프린트 상태에서는 할 수 없는 작업입니다.\"}"),
+                                    @ExampleObject(name = "GLOBAL_4091", value = "{\"error\": \"GLOBAL_4091\", \"message\": \"다른 사용자가 먼저 변경했습니다. 다시 불러온 뒤 시도하세요.\"}")
+                            })),
+            @ApiResponse(responseCode = "500", description = "🚨 예기치 못한 예외 발생",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class),
+                            examples = @ExampleObject(value = "{\"error\": \"GLOBAL_5001\", \"message\": \"예기치 못한 예외가 발생했습니다.\"}")))
+    })
     ResponseEntity<DesignReviewItemResponse> updateDesignReviewItem(
             @Parameter(description = "디자인 검수 항목 ID") long itemId,
             DesignReviewItemUpdateRequest request,
             @AuthenticationPrincipal LoginAdmin loginAdmin
+    );
+
+    @Operation(
+            summary = "디자인 검수 항목 삭제",
+            description = "🔐 <strong>관리자 토큰 필요</strong><br>MANUAL_REVIEW이고 실행 중인 작업이 없을 때 가능. 항목 이력도 함께 지운다"
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "✅ 디자인 검수 항목 삭제 성공"),
+            @ApiResponse(responseCode = "400", description = "🚨 version 누락",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class),
+                            examples = @ExampleObject(value = "{\"error\": \"GLOBAL_4001\", \"message\": \"잘못된 요청 파라미터입니다.\"}"))),
+            @ApiResponse(responseCode = "404", description = "🚨 디자인 검수 항목 없음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class),
+                            examples = @ExampleObject(value = "{\"error\": \"DESIGN_4041\", \"message\": \"존재하지 않는 디자인 검수 항목입니다.\"}"))),
+            @ApiResponse(responseCode = "409", description = "🚨 MANUAL_REVIEW가 아님, 실행 중인 작업 있음, version 불일치",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class),
+                            examples = {
+                                    @ExampleObject(name = "SPRINT_4092", value = "{\"error\": \"SPRINT_4092\", \"message\": \"현재 스프린트 상태에서는 할 수 없는 작업입니다.\"}"),
+                                    @ExampleObject(name = "GLOBAL_4091", value = "{\"error\": \"GLOBAL_4091\", \"message\": \"다른 사용자가 먼저 변경했습니다. 다시 불러온 뒤 시도하세요.\"}")
+                            })),
+            @ApiResponse(responseCode = "500", description = "🚨 예기치 못한 예외 발생",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class),
+                            examples = @ExampleObject(value = "{\"error\": \"GLOBAL_5001\", \"message\": \"예기치 못한 예외가 발생했습니다.\"}")))
+    })
+    ResponseEntity<Void> deleteDesignReviewItem(
+            @Parameter(description = "디자인 검수 항목 ID") long itemId,
+            @Parameter(description = "디자인 검수 항목 낙관적 잠금 값") Integer version
     );
 
     @Operation(
