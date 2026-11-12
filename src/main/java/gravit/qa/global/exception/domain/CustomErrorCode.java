@@ -56,6 +56,9 @@ public enum CustomErrorCode implements ErrorCode {
     // Design Review
     DESIGN_REVIEW_ITEM_NOT_FOUND(NOT_FOUND, "DESIGN_4041", "존재하지 않는 디자인 검수 항목입니다."),
 
+    // Fix Report
+    FIX_REPORT_NOT_READY(CONFLICT, "FIX_REPORT_4091", "미검수 항목이 남았거나 실행 중인 작업이 있어 수정사항 파일을 만들 수 없습니다."),
+
     // Reflection
     REFLECTION_NOT_FOUND(NOT_FOUND, "REFLECTION_4041", "존재하지 않는 반영 제안입니다."),
     REFLECTION_SPEC_CHANGED(CONFLICT, "REFLECTION_4091", "제안을 만든 뒤 Notion 명세가 바뀌었습니다. 명세를 다시 수집하세요."),
