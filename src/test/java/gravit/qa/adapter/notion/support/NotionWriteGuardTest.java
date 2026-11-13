@@ -49,9 +49,9 @@ class NotionWriteGuardTest {
         }
 
         @Test
-        void 스프린트_페이지_QA_기준점_속성_쓰기도_막는다() {
+        void 스프린트_페이지_속성_쓰기도_막는다() {
             // given
-            JsonNode body = json("{\"properties\": {\"QA 기준점\": {\"rich_text\": []}}}");
+            JsonNode body = json("{\"properties\": {\"변경 요약\": {\"rich_text\": []}}}");
 
             // when & then
             assertThat(NotionWriteGuard.isAllowed(HttpMethod.PATCH, "/v1/pages/" + PAGE_ID, body, null)).isFalse();

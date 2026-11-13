@@ -1,5 +1,6 @@
 package gravit.qa.feature.domain;
 
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
@@ -10,7 +11,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class SpecStatusTest {
 
     @ParameterizedTest
-    @CsvSource({"역문서화 초안, DRAFT", "확인 필요, NEEDS_CHECK", "확정, CONFIRMED"})
+    @CsvSource({"확인 필요, NEEDS_CHECK", "확정, CONFIRMED"})
     void Notion_명세_상태_라벨을_상태로_바꾼다(
             String label,
             SpecStatus expected
@@ -25,5 +26,11 @@ class SpecStatusTest {
     void 모르는_라벨은_빈_값이다(String label) {
         // when & then
         assertThat(SpecStatus.fromNotionLabel(label)).isEmpty();
+    }
+
+    @Test
+    void 삭제한_명세_상태_라벨은_빈_값이다() {
+        // when & then
+        assertThat(SpecStatus.fromNotionLabel("역문서화 초안")).isEmpty();
     }
 }
