@@ -10,7 +10,6 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public enum SpecStatus {
 
-    DRAFT("역문서화 초안"),
     NEEDS_CHECK("확인 필요"),
     CONFIRMED("확정");
 
