@@ -46,7 +46,6 @@
 
 - 다섯 곳의 결과를 모두 `sprint_connection`에 쓴 뒤, 하나라도 실패하면 단계를 실패시킨다. 5xx·타임아웃이 섞여 있으면 재시도하고, 그 밖에는 재시도하지 않는다
 - `connections[].ref`는 저장소면 `qa-baseline@{짧은 SHA}`. 1차 판정은 이 SHA의 코드를 읽는다
-- 종료 때 Notion `QA 기준점`을 쓰지 않는다(새 흐름에서 읽는 곳이 없어 없앴다)
 
 ## SPEC_COLLECT (명세 수집)
 

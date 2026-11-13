@@ -52,7 +52,7 @@
 
 - 스프린트 `이름`이나 기능 명세 `화면 ID`가 비어 있으면 재시도해도 소용없으므로 재시도하지 않는 실패(`NonRetryableExternalApiException`)로 끝낸다
 - 기능 명세 DB 속성은 `화면 ID`, `화면 이름`, `최종 검증일`만 읽는다. 명세 상태, 파트, 라우트, 관련 API, Figma, FE 스펙 ID는 본문 맨 위 `항목 | 값` 표에서 읽는다(`prepare-job.md`의 SPEC_COLLECT)
-- 쓰기는 이번 스프린트 `대상 기능` 페이지의 본문과 수정 이력 `반영일` 칸만 허용한다. 범위와 허용 요청은 `reflection.md`의 Notion 쓰기 허용 범위. 스프린트 페이지 `QA 기준점` 속성은 더 이상 쓰지 않는다
+- 쓰기는 이번 스프린트 `대상 기능` 페이지의 본문과 수정 이력 `반영일` 칸만 허용한다. 범위와 허용 요청은 `reflection.md`의 Notion 쓰기 허용 범위
 - 블록 쓰기: `PATCH /v1/blocks/{id}`(글, 표 행), `PATCH /v1/blocks/{id}/children`(`after` 지정 추가), `DELETE /v1/blocks/{id}`. API 버전 `2022-06-28`
 
 ## 배포
