@@ -303,8 +303,7 @@ class NotionClientIntegrationTest {
                    "기간": {"id": "p", "type": "date", "date": {"start": "2026-10-01", "end": "2026-10-14"}},
                    "대상 기능": {"id": "rel%%3Ax", "type": "relation", "relation": [{"id": "22222222-2222-2222-2222-222222222222"}], "has_more": %s},
                    "변경 요약": {"id": "s", "type": "rich_text", "rich_text": [{"plain_text": "유닛 상세 개편"}]},
-                   "Figma QA 페이지": {"id": "f", "type": "url", "url": "https://www.figma.com/design/AbC123/Gravit?node-id=1-1"},
-                   "QA 기준점": {"id": "b", "type": "rich_text", "rich_text": []}
+                   "Figma QA 페이지": {"id": "f", "type": "url", "url": "https://www.figma.com/design/AbC123/Gravit?node-id=1-1"}
                  }}
                 """.formatted(parentDatabaseId, relationHasMore);
     }

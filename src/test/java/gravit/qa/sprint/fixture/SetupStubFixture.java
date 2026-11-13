@@ -226,8 +226,7 @@ public final class SetupStubFixture {
                    "기간": {"id": "p", "type": "date", "date": null},
                    "대상 기능": {"id": "rel", "type": "relation", "relation": [%s], "has_more": false},
                    "변경 요약": {"id": "s", "type": "rich_text", "rich_text": [{"plain_text": "유닛 상세 개편"}]},
-                   "Figma QA 페이지": {"id": "f", "type": "url", "url": %s},
-                   "QA 기준점": {"id": "b", "type": "rich_text", "rich_text": []}
+                   "Figma QA 페이지": {"id": "f", "type": "url", "url": %s}
                  }}
                 """.formatted(SPRINT_PAGE_ID, SPRINT_DB, SPRINT_KEY, relations, figma);
     }
